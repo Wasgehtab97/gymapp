@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # gymapp
 
 A new Flutter project.
@@ -14,3 +15,6 @@ A few resources to get you started if this is your first Flutter project:
 For help getting started with Flutter development, view the
 [online documentation](https://docs.flutter.dev/), which offers tutorials,
 samples, guidance on mobile development, and a full API reference.
+=======
+# gymapp
+>>>>>>> 584519d6d423fdddcd4e0ffff189333f18b03e0d
