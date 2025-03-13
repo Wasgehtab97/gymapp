@@ -6,7 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../config.dart';
 
 class LoginForm extends StatefulWidget {
-  const LoginForm({super.key});
+  const LoginForm({Key? key}) : super(key: key);
   
   @override
   _LoginFormState createState() => _LoginFormState();
@@ -36,7 +36,6 @@ class _LoginFormState extends State<LoginForm> {
           _success = result['message'] ?? 'Login erfolgreich';
           _error = '';
         });
-        // Speichern der Authentifizierungsdaten in SharedPreferences
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('token', result['token']);
         await prefs.setInt('userId', result['userId']);
@@ -44,7 +43,6 @@ class _LoginFormState extends State<LoginForm> {
         if (result.containsKey('role')) {
           await prefs.setString('role', result['role']);
         }
-        // Navigiere zur HomePage und entferne alle vorherigen Routen
         Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
       } else {
         setState(() {
@@ -81,6 +79,7 @@ class _LoginFormState extends State<LoginForm> {
                 controller: _emailController,
                 decoration: const InputDecoration(labelText: 'E-Mail'),
                 keyboardType: TextInputType.emailAddress,
+                textInputAction: TextInputAction.next,
                 validator: (value) {
                   if (value == null || value.trim().isEmpty) {
                     return 'Bitte geben Sie eine E-Mail ein.';
@@ -92,6 +91,7 @@ class _LoginFormState extends State<LoginForm> {
                 controller: _passwordController,
                 decoration: const InputDecoration(labelText: 'Passwort'),
                 obscureText: true,
+                textInputAction: TextInputAction.done,
                 validator: (value) {
                   if (value == null || value.trim().isEmpty) {
                     return 'Bitte geben Sie ein Passwort ein.';

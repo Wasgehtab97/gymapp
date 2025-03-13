@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'screens/gym.dart';
 import 'screens/profile.dart';
-import 'screens/reporting_dashboard.dart';
+import 'screens/report_dashboard.dart';  // Korrekte Datei
 import 'screens/admin_dashboard.dart';
 
 class HomePage extends StatefulWidget {
@@ -18,17 +18,14 @@ class _HomePageState extends State<HomePage> {
   String? userRole;
   bool _roleLoaded = false;
 
-  // Standardseiten, die immer angezeigt werden:
   final List<Widget> _defaultPages = [
-    GymScreen(),              // Gym Geräteübersicht (stateful, daher kein const)
-    ProfileScreen(),          // Profil
-    ReportDashboardScreen()   // Reporting Dashboard
+    GymScreen(),
+    ProfileScreen(),
+    ReportDashboardScreen(), // Korrekt
   ];
 
-  // Zusätzliche Seite für Admins:
-  final Widget _adminPage = AdminDashboardScreen(); // ebenfalls ohne const
+  final Widget _adminPage = AdminDashboardScreen();
 
-  // Dynamische Seitenliste: Wenn der Nutzer "admin" ist, wird die Admin-Seite hinzugefügt.
   List<Widget> get _pages {
     if (userRole == 'admin') {
       return [..._defaultPages, _adminPage];
@@ -36,7 +33,6 @@ class _HomePageState extends State<HomePage> {
     return _defaultPages;
   }
 
-  // Dynamische BottomNavigationBar-Items:
   List<BottomNavigationBarItem> get _navigationItems {
     List<BottomNavigationBarItem> items = [
       const BottomNavigationBarItem(
@@ -63,12 +59,8 @@ class _HomePageState extends State<HomePage> {
     return items;
   }
 
-  // Lädt die Nutzerrolle aus SharedPreferences.
   Future<void> _loadUserRole() async {
     final prefs = await SharedPreferences.getInstance();
-    // Testweise: Hier kannst du den Wert manuell setzen, falls nötig.
-    // await prefs.setString('role', 'admin');
-    
     String? role = prefs.getString('role');
     debugPrint('Geladene Rolle: $role');
     setState(() {
@@ -97,7 +89,6 @@ class _HomePageState extends State<HomePage> {
       );
     }
 
-    // Sicherstellen, dass der aktuelle Index innerhalb der _pages-Liste liegt.
     if (_currentIndex >= _pages.length) {
       _currentIndex = 0;
     }

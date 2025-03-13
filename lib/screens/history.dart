@@ -15,7 +15,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
   List<dynamic> historyData = [];
   bool isLoading = true;
   int? userId;
-  late int deviceId;
+  int? deviceId;
+  String? exercise;
 
   @override
   void initState() {
@@ -28,13 +29,19 @@ class _HistoryScreenState extends State<HistoryScreen> {
     setState(() {
       userId = prefs.getInt('userId');
     });
-    // deviceId wird als Route-Argument übergeben
     final args = ModalRoute.of(context)?.settings.arguments;
-    if (args is int) {
+    if (args is Map) {
+      // Hier erwarten wir deviceId und optional exercise
+      deviceId = args['deviceId'];
+      if (args.containsKey('exercise')) {
+        exercise = args['exercise'];
+      }
+    } else if (args is int) {
       deviceId = args;
     } else {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text("Ungültige Geräte-ID")));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Ungültige Geräte-ID")),
+      );
       return;
     }
     if (userId != null) {
@@ -44,7 +51,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
   Future<void> _fetchHistory() async {
     try {
-      final data = await ApiService().getHistory(userId!, deviceId);
+      // Rufe die Trainingshistorie ab – falls ein Übungsname gesetzt ist, wird dieser genutzt, sonst die deviceId
+      final data = await ApiService().getHistory(
+        userId!,
+        deviceId: deviceId,
+        exercise: exercise,
+      );
       setState(() {
         historyData = data;
         isLoading = false;
@@ -57,7 +69,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
     }
   }
 
-  // Formatiert ein Datum (String oder DateTime) im Format YYYY-MM-DD
   String _formatLocalDate(dynamic dateInput) {
     DateTime d;
     if (dateInput is String) {
@@ -71,20 +82,15 @@ class _HistoryScreenState extends State<HistoryScreen> {
     return "${d.year}-${pad(d.month)}-${pad(d.day)}";
   }
 
-  // Gruppiert die Trainingsdaten nach Datum
   Map<String, List<dynamic>> _groupHistoryByDate() {
     Map<String, List<dynamic>> grouped = {};
     for (var entry in historyData) {
       String dateFormatted = _formatLocalDate(entry['training_date']);
-      if (!grouped.containsKey(dateFormatted)) {
-        grouped[dateFormatted] = [];
-      }
-      grouped[dateFormatted]!.add(entry);
+      grouped.putIfAbsent(dateFormatted, () => []).add(entry);
     }
     return grouped;
   }
 
-  // Gibt die gruppierten Datumskeys sortiert zurück
   List<String> _getSortedDates(Map<String, List<dynamic>> grouped) {
     List<String> dates = grouped.keys.toList();
     dates.sort((a, b) => DateTime.parse(a).compareTo(DateTime.parse(b)));
@@ -96,7 +102,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
     final groupedData = _groupHistoryByDate();
     final sortedDates = _getSortedDates(groupedData);
 
-    // Erstellung der Chart-Daten: Für jedes Datum wird der gewichtete Durchschnitt (geschätztes 1RM) berechnet.
+    // Diagramm-Daten: Berechne für jedes Datum einen gewichteten Durchschnitt (1RM-Schätzwert)
     List<String> chartLabels = sortedDates;
     List<double> chartDataPoints = sortedDates.map((date) {
       final sessions = groupedData[date]!;
@@ -114,110 +120,160 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('Trainingshistorie für Nutzer ${userId ?? 'unbekannt'}'),
+        title: const Text('Trainingshistorie', style: TextStyle(color: Colors.red)),
+        backgroundColor: Colors.black,
       ),
-      body: isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                children: [
-                  const Text(
-                    'Leistungsverlauf',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 16),
-                  // Diagramm zur Visualisierung des Leistungsverlaufs
-                  SizedBox(
-                    height: 300,
-                    child: LineChart(
-                      LineChartData(
-                        titlesData: FlTitlesData(
-                          bottomTitles: AxisTitles(
-                            sideTitles: SideTitles(
-                              showTitles: true,
-                              interval: 1,
-                              getTitlesWidget: (value, meta) {
-                                int index = value.toInt();
-                                if (index >= 0 && index < chartLabels.length) {
-                                  return Text(
-                                    chartLabels[index],
-                                    style: const TextStyle(fontSize: 10),
-                                  );
-                                }
-                                return const Text('');
-                              },
-                            ),
-                          ),
-                          leftTitles: AxisTitles(
-                            sideTitles: SideTitles(
-                              showTitles: true,
-                              interval: 10,
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Color(0xFF0D0D0D), Color(0xFF1A1A1A), Color(0xFF333333)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+        child: isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : SingleChildScrollView(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Text(
+                      'Leistungsverlauf',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.red,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 16),
+                    Card(
+                      elevation: 4,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      margin: const EdgeInsets.symmetric(vertical: 8),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: SizedBox(
+                          height: 300,
+                          child: LineChart(
+                            LineChartData(
+                              titlesData: FlTitlesData(
+                                bottomTitles: AxisTitles(
+                                  sideTitles: SideTitles(
+                                    showTitles: true,
+                                    interval: 1,
+                                    getTitlesWidget: (value, meta) {
+                                      int index = value.toInt();
+                                      if (index >= 0 && index < chartLabels.length) {
+                                        return SideTitleWidget(
+                                          meta: meta,
+                                          space: 4,
+                                          child: Text(
+                                            chartLabels[index],
+                                            style: const TextStyle(fontSize: 10, color: Colors.red),
+                                          ),
+                                        );
+                                      }
+                                      return const SizedBox.shrink();
+                                    },
+                                  ),
+                                ),
+                                leftTitles: AxisTitles(
+                                  sideTitles: SideTitles(
+                                    showTitles: true,
+                                    interval: 10,
+                                    getTitlesWidget: (value, meta) => Text(
+                                      value.toInt().toString(),
+                                      style: const TextStyle(fontSize: 10, color: Colors.red),
+                                    ),
+                                  ),
+                                ),
+                                topTitles: AxisTitles(
+                                  sideTitles: SideTitles(showTitles: false),
+                                ),
+                                rightTitles: AxisTitles(
+                                  sideTitles: SideTitles(showTitles: false),
+                                ),
+                              ),
+                              gridData: FlGridData(show: true),
+                              borderData: FlBorderData(show: true),
+                              lineBarsData: [
+                                LineChartBarData(
+                                  spots: List.generate(
+                                    chartDataPoints.length,
+                                    (index) => FlSpot(index.toDouble(), chartDataPoints[index]),
+                                  ),
+                                  isCurved: true,
+                                  color: Colors.teal,
+                                  barWidth: 3,
+                                  dotData: FlDotData(show: true),
+                                ),
+                              ],
                             ),
                           ),
                         ),
-                        gridData: FlGridData(show: true),
-                        borderData: FlBorderData(show: true),
-                        lineBarsData: [
-                          LineChartBarData(
-                            spots: List.generate(
-                              chartDataPoints.length,
-                              (index) => FlSpot(index.toDouble(), chartDataPoints[index]),
-                            ),
-                            isCurved: true,
-                            color: Colors.teal,
-                            barWidth: 3,
-                            dotData: FlDotData(show: true),
-                          ),
-                        ],
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 24),
-                  // Anzeige der gruppierten Trainingsdaten
-                  if (groupedData.isNotEmpty)
-                    Column(
-                      children: sortedDates.map((date) {
-                        List<dynamic> sessions = groupedData[date]!;
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 20.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                date,
-                                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                              ),
-                              const SizedBox(height: 8),
-                              SingleChildScrollView(
-                                scrollDirection: Axis.horizontal,
-                                child: DataTable(
-                                  columns: const [
-                                    DataColumn(label: Text('Satz')),
-                                    DataColumn(label: Text('Kg')),
-                                    DataColumn(label: Text('Wdh')),
-                                  ],
-                                  rows: sessions.map<DataRow>((entry) {
-                                    return DataRow(
-                                      cells: [
-                                        DataCell(Text(entry['sets'].toString())),
-                                        DataCell(Text(entry['weight'].toString())),
-                                        DataCell(Text(entry['reps'].toString())),
+                    const SizedBox(height: 24),
+                    if (groupedData.isNotEmpty)
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: sortedDates.map((date) {
+                          List<dynamic> sessions = groupedData[date]!;
+                          return Card(
+                            elevation: 3,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            margin: const EdgeInsets.only(bottom: 16),
+                            child: Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    date,
+                                    style: const TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.red,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  SingleChildScrollView(
+                                    scrollDirection: Axis.horizontal,
+                                    child: DataTable(
+                                      columns: const [
+                                        DataColumn(label: Text('Satz', style: TextStyle(color: Colors.red))),
+                                        DataColumn(label: Text('Kg', style: TextStyle(color: Colors.red))),
+                                        DataColumn(label: Text('Wdh', style: TextStyle(color: Colors.red))),
                                       ],
-                                    );
-                                  }).toList(),
-                                ),
+                                      rows: sessions.map<DataRow>((entry) {
+                                        return DataRow(
+                                          cells: [
+                                            DataCell(Text(entry['sets'].toString(), style: const TextStyle(color: Colors.red))),
+                                            DataCell(Text(entry['weight'].toString(), style: const TextStyle(color: Colors.red))),
+                                            DataCell(Text(entry['reps'].toString(), style: const TextStyle(color: Colors.red))),
+                                          ],
+                                        );
+                                      }).toList(),
+                                    ),
+                                  ),
+                                ],
                               ),
-                            ],
-                          ),
-                        );
-                      }).toList(),
-                    )
-                  else
-                    const Text("Keine Trainingshistorie vorhanden."),
-                ],
+                            ),
+                          );
+                        }).toList(),
+                      )
+                    else
+                      const Center(child: Text("Keine Trainingshistorie vorhanden.", style: TextStyle(color: Colors.red))),
+                  ],
+                ),
               ),
-            ),
+      ),
     );
   }
 }

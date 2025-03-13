@@ -1,9 +1,10 @@
+// lib/screens/trainingsplan.dart
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_services.dart';
 
 class TrainingsplanScreen extends StatefulWidget {
-  TrainingsplanScreen({Key? key}) : super(key: key);
+  const TrainingsplanScreen({Key? key}) : super(key: key);
 
   @override
   _TrainingsplanScreenState createState() => _TrainingsplanScreenState();
@@ -94,9 +95,20 @@ class _TrainingsplanScreenState extends State<TrainingsplanScreen> {
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: const Text("Neuen Trainingsplan erstellen"),
+          backgroundColor: Colors.grey[900],
+          title: const Text(
+            "Neuen Trainingsplan erstellen",
+            style: TextStyle(color: Colors.red),
+          ),
           content: TextField(
-            decoration: const InputDecoration(labelText: "Name des Plans"),
+            style: const TextStyle(color: Colors.red),
+            decoration: const InputDecoration(
+              labelText: "Name des Plans",
+              labelStyle: TextStyle(color: Colors.red),
+              enabledBorder: UnderlineInputBorder(
+                borderSide: BorderSide(color: Colors.red),
+              ),
+            ),
             onChanged: (value) {
               planName = value;
             },
@@ -104,16 +116,19 @@ class _TrainingsplanScreenState extends State<TrainingsplanScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text("Abbrechen"),
+              child: const Text("Abbrechen", style: TextStyle(color: Colors.red)),
             ),
             ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.black,
+              ),
               onPressed: () {
                 if (planName.trim().isNotEmpty) {
                   _createNewPlan(planName.trim());
                   Navigator.of(context).pop();
                 }
               },
-              child: const Text("Erstellen"),
+              child: const Text("Erstellen", style: TextStyle(color: Colors.red)),
             ),
           ],
         );
@@ -142,16 +157,26 @@ class _TrainingsplanScreenState extends State<TrainingsplanScreen> {
 
   Widget _buildPlanCard(Map<String, dynamic> plan) {
     return Card(
+      color: Colors.grey[850],
       margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: ListTile(
-        title: Text(plan['name']),
-        subtitle: Text("Übungen: " +
-            (plan['exercises'] != null
-                ? (plan['exercises'] as List)
-                    .map((e) => e['device_name'])
-                    .join(", ")
-                : "Keine Übungen")),
+        title: Text(
+          plan['name'],
+          style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+        ),
+        subtitle: Text(
+          "Übungen: " +
+              (plan['exercises'] != null
+                  ? (plan['exercises'] as List)
+                      .map((e) => e['device_name'])
+                      .join(", ")
+                  : "Keine Übungen"),
+          style: const TextStyle(color: Colors.red),
+        ),
         trailing: PopupMenuButton<String>(
+          icon: const Icon(Icons.more_vert, color: Colors.red),
           onSelected: (value) {
             if (value == 'edit') {
               _editPlan(plan);
@@ -162,9 +187,18 @@ class _TrainingsplanScreenState extends State<TrainingsplanScreen> {
             }
           },
           itemBuilder: (context) => [
-            const PopupMenuItem(value: 'edit', child: Text("Bearbeiten")),
-            const PopupMenuItem(value: 'start', child: Text("Plan starten")),
-            const PopupMenuItem(value: 'delete', child: Text("Löschen")),
+            PopupMenuItem(
+              value: 'edit',
+              child: Text("Bearbeiten", style: const TextStyle(color: Colors.red)),
+            ),
+            PopupMenuItem(
+              value: 'start',
+              child: Text("Plan starten", style: const TextStyle(color: Colors.red)),
+            ),
+            PopupMenuItem(
+              value: 'delete',
+              child: Text("Löschen", style: const TextStyle(color: Colors.red)),
+            ),
           ],
         ),
       ),
@@ -173,7 +207,9 @@ class _TrainingsplanScreenState extends State<TrainingsplanScreen> {
 
   Widget _buildPlanList() {
     if (trainingPlans.isEmpty) {
-      return const Center(child: Text("Keine Trainingspläne vorhanden."));
+      return const Center(
+        child: Text("Keine Trainingspläne vorhanden.", style: TextStyle(color: Colors.red)),
+      );
     }
     return ListView.builder(
       itemCount: trainingPlans.length,
@@ -187,13 +223,27 @@ class _TrainingsplanScreenState extends State<TrainingsplanScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Trainingsplan')),
-      body: isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _buildPlanList(),
+      appBar: AppBar(
+        title: const Text('Trainingsplan', style: TextStyle(color: Colors.red)),
+        backgroundColor: Colors.black,
+        centerTitle: true,
+      ),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Color(0xFF0D0D0D), Color(0xFF1A1A1A)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+        child: isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : _buildPlanList(),
+      ),
       floatingActionButton: FloatingActionButton(
+        backgroundColor: Colors.red,
         onPressed: _showCreatePlanDialog,
-        child: const Icon(Icons.add),
+        child: const Icon(Icons.add, color: Colors.white),
       ),
     );
   }
@@ -203,8 +253,7 @@ class EditTrainingPlanScreen extends StatefulWidget {
   final Map<String, dynamic> plan;
   final Function(Map<String, dynamic>)? onPlanUpdated;
 
-  EditTrainingPlanScreen({Key? key, required this.plan, this.onPlanUpdated})
-      : super(key: key);
+  const EditTrainingPlanScreen({Key? key, required this.plan, this.onPlanUpdated}) : super(key: key);
 
   @override
   _EditTrainingPlanScreenState createState() => _EditTrainingPlanScreenState();
@@ -275,61 +324,75 @@ class _EditTrainingPlanScreenState extends State<EditTrainingPlanScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Trainingsplan bearbeiten")),
-      body: isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Row(
-                    children: [
-                      const Text("Übung hinzufügen: "),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: DropdownButton<dynamic>(
-                          isExpanded: true,
-                          hint: const Text("Wähle ein Gerät"),
-                          items: availableDevices.map((device) {
-                            return DropdownMenuItem<dynamic>(
-                              value: device,
-                              child: Text(device['name']),
-                            );
-                          }).toList(),
-                          onChanged: (device) {
-                            if (device != null) _addExercise(device);
-                          },
+      appBar: AppBar(
+        title: const Text("Trainingsplan bearbeiten", style: TextStyle(color: Colors.red)),
+        backgroundColor: Colors.black,
+      ),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Color(0xFF0D0D0D), Color(0xFF1A1A1A)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+        child: isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Row(
+                      children: [
+                        const Text("Übung hinzufügen: ", style: TextStyle(color: Colors.red)),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: DropdownButton<dynamic>(
+                            isExpanded: true,
+                            hint: const Text("Wähle ein Gerät", style: TextStyle(color: Colors.red)),
+                            items: availableDevices.map((device) {
+                              return DropdownMenuItem<dynamic>(
+                                value: device,
+                                child: Text(device['name'], style: const TextStyle(color: Colors.red)),
+                              );
+                            }).toList(),
+                            onChanged: (device) {
+                              if (device != null) _addExercise(device);
+                            },
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-                Expanded(
-                  child: ReorderableListView(
-                    onReorder: _onReorder,
-                    children: exercises.asMap().entries.map((entry) {
-                      final index = entry.key;
-                      final exercise = entry.value;
-                      return ListTile(
-                        key: ValueKey('${exercise['device_id']}_$index'),
-                        title: Text(exercise['device_name']),
-                        trailing: const Icon(Icons.drag_handle),
-                      );
-                    }).toList(),
+                  Expanded(
+                    child: ReorderableListView(
+                      onReorder: _onReorder,
+                      children: exercises.asMap().entries.map((entry) {
+                        final index = entry.key;
+                        final exercise = entry.value;
+                        return ListTile(
+                          key: ValueKey('${exercise['device_id']}_$index'),
+                          title: Text(exercise['device_name'], style: const TextStyle(color: Colors.red)),
+                          trailing: const Icon(Icons.drag_handle, color: Colors.red),
+                        );
+                      }).toList(),
+                    ),
                   ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: ElevatedButton(
-                    onPressed: _savePlanChanges,
-                    child: const Text("Änderungen speichern"),
-                  ),
-                )
-              ],
-            ),
+                  Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: ElevatedButton(
+                      onPressed: _savePlanChanges,
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.black),
+                      child: const Text("Änderungen speichern", style: TextStyle(color: Colors.red)),
+                    ),
+                  )
+                ],
+              ),
+      ),
       floatingActionButton: FloatingActionButton(
+        backgroundColor: Colors.red,
         onPressed: () => Navigator.pop(context),
-        child: const Icon(Icons.close),
+        child: const Icon(Icons.close, color: Colors.white),
       ),
     );
   }

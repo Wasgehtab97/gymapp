@@ -13,6 +13,7 @@ class _GymScreenState extends State<GymScreen> {
   List<dynamic> devices = [];
   String filterQuery = "";
   bool isLoading = true;
+  final ApiService apiService = ApiService();
 
   @override
   void initState() {
@@ -22,7 +23,7 @@ class _GymScreenState extends State<GymScreen> {
 
   Future<void> _fetchDevices() async {
     try {
-      final data = await ApiService().getDevices();
+      final data = await apiService.getDevices();
       if (!mounted) return;
       setState(() {
         devices = data;
@@ -37,6 +38,78 @@ class _GymScreenState extends State<GymScreen> {
     }
   }
 
+  // Zeigt eine Auswahl der drei Grundübungen an
+  void _showExerciseSelection(dynamic device) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.black,
+      builder: (context) {
+        return Container(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                "Wähle eine Übung",
+                style: TextStyle(
+                  fontSize: 18,
+                  color: Colors.red,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 16),
+              ListTile(
+                leading: const Icon(Icons.fitness_center, color: Colors.red),
+                title: const Text("Bankdrücken", style: TextStyle(color: Colors.red)),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.pushNamed(
+                    context,
+                    '/dashboard',
+                    arguments: {
+                      'deviceId': device['id'],
+                      'exercise': 'Bankdrücken',
+                    },
+                  );
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.fitness_center, color: Colors.red),
+                title: const Text("Kniebeugen", style: TextStyle(color: Colors.red)),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.pushNamed(
+                    context,
+                    '/dashboard',
+                    arguments: {
+                      'deviceId': device['id'],
+                      'exercise': 'Kniebeugen',
+                    },
+                  );
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.fitness_center, color: Colors.red),
+                title: const Text("Kreuzheben", style: TextStyle(color: Colors.red)),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.pushNamed(
+                    context,
+                    '/dashboard',
+                    arguments: {
+                      'deviceId': device['id'],
+                      'exercise': 'Kreuzheben',
+                    },
+                  );
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final filteredDevices = devices.where((device) {
@@ -46,26 +119,40 @@ class _GymScreenState extends State<GymScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Gym Geräteübersicht'),
+        title: const Text(
+          'Gym Geräteübersicht',
+          style: TextStyle(color: Colors.red),
+        ),
+        centerTitle: true,
+        backgroundColor: Colors.black,
+        elevation: 4,
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            // Suchfeld
-            Row(
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Color(0xFF0D0D0D), Color(0xFF1A1A1A), Color(0xFF333333)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
               children: [
-                const Text(
-                  'Gerät suchen:',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade800,
+                    borderRadius: BorderRadius.circular(30),
+                  ),
                   child: TextField(
-                    decoration: const InputDecoration(
-                      hintText: 'z. B. Benchpress',
-                      contentPadding: EdgeInsets.symmetric(vertical: 10, horizontal: 10),
-                      border: OutlineInputBorder(),
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      hintText: 'Gerät suchen...',
+                      hintStyle: const TextStyle(color: Colors.white54),
+                      border: InputBorder.none,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                      prefixIcon: Icon(Icons.search, color: Colors.red.shade300),
                     ),
                     onChanged: (value) {
                       setState(() {
@@ -74,37 +161,90 @@ class _GymScreenState extends State<GymScreen> {
                     },
                   ),
                 ),
+                const SizedBox(height: 16),
+                Expanded(
+                  child: isLoading
+                      ? const Center(child: CircularProgressIndicator())
+                      : filteredDevices.isEmpty
+                          ? const Center(
+                              child: Text(
+                              'Keine Geräte gefunden.',
+                              style: TextStyle(color: Colors.white),
+                            ))
+                          : GridView.builder(
+                              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: 2,
+                                crossAxisSpacing: 16,
+                                mainAxisSpacing: 16,
+                                childAspectRatio: 3 / 2,
+                              ),
+                              itemCount: filteredDevices.length,
+                              itemBuilder: (context, index) {
+                                final device = filteredDevices[index];
+                                return GestureDetector(
+                                  onTap: () {
+                                    // Prüfe den exercise_mode
+                                    if (device['exercise_mode'] == 'multiple') {
+                                      _showExerciseSelection(device);
+                                    } else {
+                                      Navigator.pushNamed(
+                                        context,
+                                        '/dashboard',
+                                        arguments: {'deviceId': device['id']},
+                                      );
+                                    }
+                                  },
+                                  child: Card(
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                    elevation: 4,
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(16),
+                                        gradient: const LinearGradient(
+                                          colors: [Color(0xFFFFEBEE), Color(0xFFC62828)],
+                                          begin: Alignment.topLeft,
+                                          end: Alignment.bottomRight,
+                                        ),
+                                      ),
+                                      child: Column(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          const Icon(
+                                            Icons.fitness_center,
+                                            size: 48,
+                                            color: Colors.white,
+                                          ),
+                                          const SizedBox(height: 8),
+                                          Padding(
+                                            padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                                            child: Text(
+                                              device['name'],
+                                              textAlign: TextAlign.center,
+                                              style: const TextStyle(
+                                                fontSize: 16,
+                                                fontWeight: FontWeight.bold,
+                                                color: Colors.white,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                ),
               ],
             ),
-            const SizedBox(height: 16),
-            // Ladeanzeige oder Liste der Geräte
-            if (isLoading)
-              const Center(child: CircularProgressIndicator())
-            else if (filteredDevices.isNotEmpty)
-              Expanded(
-                child: ListView.builder(
-                  itemCount: filteredDevices.length,
-                  itemBuilder: (context, index) {
-                    final device = filteredDevices[index];
-                    debugPrint("Gerät ausgewählt: ${device['id']} (Type: ${device['id'].runtimeType})");
-                    return ListTile(
-                      title: Text(device['name']),
-                      onTap: () {
-                        // Navigiere zum Dashboard und übergebe die Geräte-ID als Argument
-                        Navigator.pushNamed(
-                          context,
-                          '/dashboard',
-                          arguments: device['id'],
-                        );
-                      },
-                    );
-                  },
-                ),
-              )
-            else
-              const Text('Keine Geräte gefunden.'),
-          ],
+          ),
         ),
+      ),
+      bottomNavigationBar: Container(
+        height: 50,
+        color: Colors.black,
       ),
     );
   }

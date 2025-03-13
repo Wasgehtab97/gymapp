@@ -1,4 +1,3 @@
-// lib/widgets/feedback_form.dart
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -33,7 +32,8 @@ class _FeedbackFormState extends State<FeedbackForm> {
 
     final prefs = await SharedPreferences.getInstance();
     final userId = prefs.getInt('userId');
-    if (userId == null) {
+    final token = prefs.getString('token'); // Token abrufen
+    if (userId == null || token == null) {
       setState(() {
         _error = 'Benutzer nicht authentifiziert.';
       });
@@ -43,13 +43,18 @@ class _FeedbackFormState extends State<FeedbackForm> {
     try {
       final response = await http.post(
         Uri.parse('$API_URL/api/feedback'),
-        headers: {'Content-Type': 'application/json'},
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token', // Token im Header mitschicken
+        },
         body: jsonEncode({
           'userId': userId,
           'deviceId': widget.deviceId,
           'feedback_text': feedbackText,
         }),
       );
+      debugPrint('Response status: ${response.statusCode}');
+      debugPrint('Response body: ${response.body}');
       final result = jsonDecode(response.body);
       if (response.statusCode == 200) {
         setState(() {
@@ -97,7 +102,7 @@ class _FeedbackFormState extends State<FeedbackForm> {
           children: [
             const Text(
               'Feedback geben',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.red),
             ),
             if (_error.isNotEmpty)
               Padding(
@@ -121,6 +126,7 @@ class _FeedbackFormState extends State<FeedbackForm> {
               decoration: const InputDecoration(
                 border: OutlineInputBorder(),
                 hintText: 'Bitte geben Sie Ihr Feedback ein...',
+                hintStyle: TextStyle(color: Colors.redAccent),
               ),
               maxLines: 4,
               validator: (value) {
@@ -135,13 +141,15 @@ class _FeedbackFormState extends State<FeedbackForm> {
               children: [
                 ElevatedButton(
                   onPressed: _handleSubmit,
-                  child: const Text('Absenden'),
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.black),
+                  child: const Text('Absenden', style: TextStyle(color: Colors.red)),
                 ),
                 if (widget.onClose != null) const SizedBox(width: 8),
                 if (widget.onClose != null)
                   ElevatedButton(
                     onPressed: widget.onClose,
-                    child: const Text('Abbrechen'),
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.black),
+                    child: const Text('Abbrechen', style: TextStyle(color: Colors.red)),
                   ),
               ],
             ),

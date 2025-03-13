@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'screens/dashboard.dart';
 import 'screens/history.dart';
 import 'screens/profile.dart';
-import 'screens/reporting_dashboard.dart';
+import 'screens/report_dashboard.dart';
 import 'screens/admin_dashboard.dart';
 import 'screens/trainingsplan.dart';
 import 'home_page.dart';
@@ -23,33 +23,36 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         primarySwatch: Colors.blue,
         brightness: Brightness.light,
+        textTheme: const TextTheme(
+          bodyLarge: TextStyle(color: Colors.red),
+        ),
       ),
       home: const HomePage(),
       onGenerateRoute: (RouteSettings settings) {
         switch (settings.name) {
           case '/dashboard':
             return MaterialPageRoute(
-              builder: (context) => DashboardScreen(),
-              settings: settings,  // Hier werden die Route-Argumente mitgegeben
+              builder: (context) => const DashboardScreen(),
+              settings: settings,
             );
           case '/history':
             return MaterialPageRoute(
-              builder: (context) => HistoryScreen(),
+              builder: (context) => const HistoryScreen(),
               settings: settings,
             );
           case '/profile':
             return MaterialPageRoute(
-              builder: (context) => ProfileScreen(),
+              builder: (context) => const ProfileScreen(),
               settings: settings,
             );
           case '/reporting':
             return MaterialPageRoute(
-              builder: (context) => ReportDashboardScreen(),
+              builder: (context) => const ReportDashboardScreen(),
               settings: settings,
             );
           case '/admin':
             return MaterialPageRoute(
-              builder: (context) => AdminDashboardScreen(),
+              builder: (context) => const AdminDashboardScreen(),
               settings: settings,
             );
           case '/trainingsplan':

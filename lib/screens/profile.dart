@@ -5,11 +5,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_services.dart';
 import '../widgets/registration_form.dart';
 import '../widgets/login_form.dart';
-import '../widgets/streak_chart.dart';
+import '../widgets/streak_badge.dart';
+import '../widgets/exp_badge.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({Key? key}) : super(key: key);
-
+  
   @override
   _ProfileScreenState createState() => _ProfileScreenState();
 }
@@ -18,41 +19,57 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String storedUsername = "BeispielNutzer";
   String? token;
   int? userId;
+  int expProgress = 0; // 0 bis 999
+  int divisionIndex = 0; // 0: Bronze 4, 1: Bronze 3, ...
   bool showCalendar = false;
   List<String> trainingDates = [];
   bool loadingDates = true;
   int streak = 0;
   bool loadingStreak = true;
-
+  
   final ApiService apiService = ApiService();
-
+  
   @override
   void initState() {
     super.initState();
     _loadUserInfo();
   }
-
+  
   Future<void> _loadUserInfo() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
       storedUsername = prefs.getString('username') ?? "BeispielNutzer";
       token = prefs.getString('token');
       userId = prefs.getInt('userId');
+      expProgress = prefs.getInt('exp_progress') ?? 0;
+      divisionIndex = prefs.getInt('division_index') ?? 0;
     });
     if (userId != null) {
-      _fetchStreak();
-      _fetchTrainingDates();
+      await Future.wait([
+        _fetchStreak(),
+        _fetchTrainingDates(),
+      ]);
+      try {
+        final userData = await apiService.getUserData(userId!);
+        setState(() {
+          expProgress = userData['data']['exp_progress'] ?? 0;
+          divisionIndex = userData['data']['division_index'] ?? 0;
+        });
+        await prefs.setInt('exp_progress', expProgress);
+        await prefs.setInt('division_index', divisionIndex);
+      } catch (e) {
+        debugPrint("Fehler beim Abrufen der Benutzerdaten: $e");
+      }
     }
   }
-
-  // Formatiert ein Datum im Format YYYY-MM-DD
+  
   String getLocalDateString(DateTime date) {
     final year = date.year.toString();
     final month = date.month.toString().padLeft(2, '0');
     final day = date.day.toString().padLeft(2, '0');
     return "$year-$month-$day";
   }
-
+  
   Future<void> _fetchStreak() async {
     try {
       final response = await apiService.getDataFromUrl('/api/streak/${userId!}');
@@ -67,18 +84,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
       });
     }
   }
-
+  
   Future<void> _fetchTrainingDates() async {
     try {
       final response = await apiService.getDataFromUrl('/api/history/${userId!}');
       if (response['data'] != null) {
-        final dates = response['data']
-            .map<String>((entry) {
-              DateTime d = DateTime.parse(entry['training_date']);
-              return getLocalDateString(d);
-            })
-            .toSet()
-            .toList();
+        final dates = (response['data'] as List)
+          .map<String>((entry) {
+            DateTime d = DateTime.parse(entry['training_date']);
+            return getLocalDateString(d);
+          })
+          .toSet()
+          .toList();
         setState(() {
           trainingDates = dates;
         });
@@ -91,8 +108,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       });
     }
   }
-
-  // Logout: Löscht die SharedPreferences und navigiert zur Startseite.
+  
   Future<void> _handleLogout() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.clear();
@@ -100,128 +116,163 @@ class _ProfileScreenState extends State<ProfileScreen> {
       Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
     }
   }
-
-  // Prüft, ob das angegebene Datum als Trainingstag markiert ist.
+  
   bool _isTrainingDay(DateTime date) {
     final formatted = getLocalDateString(date);
     return trainingDates.contains(formatted);
   }
-
+  
   @override
   Widget build(BuildContext context) {
-    // Falls kein Token vorhanden ist, zeige Login-/Registrierungsformulare an.
     if (token == null) {
       return Scaffold(
-        appBar: AppBar(title: const Text("Login / Registrierung")),
-        body: SingleChildScrollView(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            children: const [
-              RegistrationForm(),
-              SizedBox(height: 20),
-              LoginForm(),
-            ],
+        appBar: AppBar(
+          title: const Text("Login / Registrierung", style: TextStyle(color: Colors.red)),
+          backgroundColor: Colors.black,
+        ),
+        body: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Color(0xFF0D0D0D), Color(0xFF1A1A1A), Color(0xFF333333)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(16.0),
+            child: const Column(
+              children: [
+                RegistrationForm(),
+                SizedBox(height: 20),
+                LoginForm(),
+              ],
+            ),
           ),
         ),
       );
     }
-
+    
     return Scaffold(
-      appBar: AppBar(title: const Text("Profil")),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
+      appBar: AppBar(
+        title: const Text("Profil", style: TextStyle(color: Colors.red)),
+        backgroundColor: Colors.black,
+      ),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Color(0xFF0D0D0D), Color(0xFF1A1A1A), Color(0xFF333333)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+        child: Stack(
           children: [
-            // Nutzername, der den Kalender umschaltet
-            Row(
-              children: [
-                const Text(
-                  "Nutzername: ",
-                  style: TextStyle(fontSize: 18),
-                ),
-                GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      showCalendar = !showCalendar;
-                    });
-                  },
-                  child: Text(
-                    storedUsername,
-                    style: const TextStyle(
-                      fontSize: 18,
-                      color: Colors.blue,
-                      decoration: TextDecoration.underline,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            // Anzeige des aktuellen Streaks und des zugehörigen Diagramms
-            loadingStreak
-                ? const Text("Lade Streak...")
-                : Column(
-                    children: [
-                      Text("Aktueller Streak: $streak Tage",
-                          style: const TextStyle(fontSize: 16)),
-                      const SizedBox(height: 8),
-                      StreakChart(streak: streak),
-                    ],
-                  ),
-            const SizedBox(height: 16),
-            // Button zum Logout
-            ElevatedButton(
-              onPressed: _handleLogout,
-              child: const Text("Abmelden"),
-            ),
-            const SizedBox(height: 16),
-            // Button, um zur Trainingsplan-Seite zu navigieren
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pushNamed(context, '/trainingsplan');
-              },
-              child: const Text("Trainingsplan"),
-            ),
-            const SizedBox(height: 16),
-            // Kalenderanzeige
-            if (showCalendar)
-              Column(
-                children: [
-                  const Text(
-                    "Trainings-Tage",
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 8),
-                  loadingDates
-                      ? const Text("Lade Trainingsdaten...")
-                      : TableCalendar(
-                          firstDay: DateTime(2000),
-                          lastDay: DateTime(2100),
-                          focusedDay: DateTime.now(),
-                          calendarBuilders: CalendarBuilders(
-                            defaultBuilder: (context, date, _) {
-                              if (_isTrainingDay(date)) {
-                                return Container(
-                                  margin: const EdgeInsets.all(6.0),
-                                  alignment: Alignment.center,
-                                  decoration: const BoxDecoration(
-                                    color: Colors.orangeAccent,
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: Text(
-                                    date.day.toString(),
-                                    style: const TextStyle(color: Colors.white),
-                                  ),
-                                );
-                              }
-                              return null;
-                            },
+            Positioned.fill(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(16, 100, 16, 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SizedBox(height: 20),
+                    if (showCalendar)
+                      Card(
+                        color: Colors.white.withOpacity(0.9),
+                        elevation: 6,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                        margin: const EdgeInsets.symmetric(vertical: 8),
+                        child: Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Column(
+                            children: [
+                              const Text(
+                                "Trainings-Tage",
+                                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.red),
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 12),
+                              loadingDates
+                                  ? const Center(child: CircularProgressIndicator())
+                                  : TableCalendar(
+                                      firstDay: DateTime(2000),
+                                      lastDay: DateTime(2100),
+                                      focusedDay: DateTime.now(),
+                                      headerStyle: const HeaderStyle(formatButtonVisible: false),
+                                      calendarBuilders: CalendarBuilders(
+                                        defaultBuilder: (context, date, _) {
+                                          if (_isTrainingDay(date)) {
+                                            return Container(
+                                              margin: const EdgeInsets.all(4.0),
+                                              alignment: Alignment.center,
+                                              decoration: BoxDecoration(
+                                                color: Colors.deepOrange,
+                                                shape: BoxShape.circle,
+                                              ),
+                                              child: Text(
+                                                date.day.toString(),
+                                                style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+                                              ),
+                                            );
+                                          }
+                                          return null;
+                                        },
+                                      ),
+                                    ),
+                            ],
                           ),
                         ),
+                      ),
+                    const SizedBox(height: 20),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.black,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                      onPressed: _handleLogout,
+                      child: const Center(child: Text("Abmelden", style: TextStyle(fontSize: 18, color: Colors.red))),
+                    ),
+                    const SizedBox(height: 20),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.black,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                      onPressed: () {
+                        Navigator.pushNamed(context, '/trainingsplan');
+                      },
+                      child: const Center(child: Text("Trainingsplan", style: TextStyle(fontSize: 18, color: Colors.red))),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            // Badges: StreakBadge und ExpBadge
+            Positioned(
+              top: 16,
+              right: 16,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  StreakBadge(streak: streak, size: 60),
+                  const SizedBox(width: 8),
+                  ExpBadge(expProgress: expProgress, divisionIndex: divisionIndex, size: 60),
                 ],
               ),
+            ),
+            // Username oben links
+            Positioned(
+              top: 16,
+              left: 16,
+              child: Text(
+                storedUsername,
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.red),
+              ),
+            ),
           ],
         ),
+      ),
+      bottomNavigationBar: Container(
+        height: 50,
+        color: Colors.black,
       ),
     );
   }

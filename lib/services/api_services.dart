@@ -18,22 +18,30 @@ class ApiService {
     }
   }
 
-  // Trainingshistorie für einen Nutzer und ein Gerät abrufen
-  Future<List<dynamic>> getHistory(int userId, int deviceId) async {
-    final response = await http.get(Uri.parse('$baseUrl/api/history/$userId'));
+  // Trainingshistorie für einen Nutzer abrufen
+  // Optional: Falls 'exercise' gesetzt ist, wird danach gefiltert, ansonsten nach 'deviceId'.
+  Future<List<dynamic>> getHistory(int userId, {int? deviceId, String? exercise}) async {
+    String url = '$baseUrl/api/history/$userId';
+    List<String> queryParams = [];
+    if (exercise != null && exercise.isNotEmpty) {
+      queryParams.add("exercise=${Uri.encodeComponent(exercise)}");
+    } else if (deviceId != null) {
+      queryParams.add("deviceId=$deviceId");
+    }
+    if (queryParams.isNotEmpty) {
+      url += '?' + queryParams.join('&');
+    }
+    final response = await http.get(Uri.parse(url));
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body) as Map<String, dynamic>;
-      return (data['data'] as List<dynamic>)
-          .where((entry) => entry['device_id'] == deviceId)
-          .toList();
+      return data['data'];
     } else {
       throw Exception('Failed to load history: ${response.statusCode}');
     }
   }
 
   // Gerätedaten aktualisieren (nur Admin, Auth-geschützt)
-  Future<Map<String, dynamic>> updateDevice(
-      int deviceId, String name, String exerciseMode) async {
+  Future<Map<String, dynamic>> updateDevice(int deviceId, String name, String exerciseMode) async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('token') ?? '';
     final response = await http.put(
@@ -56,8 +64,7 @@ class ApiService {
   }
 
   // Benutzerregistrierung
-  Future<Map<String, dynamic>> registerUser(
-      String name, String email, String password, String membershipNumber) async {
+  Future<Map<String, dynamic>> registerUser(String name, String email, String password, String membershipNumber) async {
     final response = await http.post(
       Uri.parse('$baseUrl/api/register'),
       headers: {'Content-Type': 'application/json'},
@@ -75,7 +82,7 @@ class ApiService {
     }
   }
 
-  // Benutzer-Login
+  // Benutzer-Login inkl. EXP-Daten (exp_progress und division_index)
   Future<Map<String, dynamic>> loginUser(String email, String password) async {
     final response = await http.post(
       Uri.parse('$baseUrl/api/login'),
@@ -86,13 +93,22 @@ class ApiService {
       }),
     );
     if (response.statusCode == 200) {
-      return jsonDecode(response.body) as Map<String, dynamic>;
+      final result = jsonDecode(response.body) as Map<String, dynamic>;
+      final prefs = await SharedPreferences.getInstance();
+      if (result.containsKey('exp_progress')) {
+        await prefs.setInt('exp_progress', result['exp_progress']);
+      }
+      if (result.containsKey('division_index')) {
+        await prefs.setInt('division_index', result['division_index']);
+      }
+      return result;
     } else {
       throw Exception('Login failed: ${response.statusCode}');
     }
   }
 
-  // Trainingsdaten posten
+  // Trainingsdaten posten – überträgt auch den Übungsnamen, falls vorhanden.
+  // Wir werfen den Response-Body als Exception, falls ein Fehler auftritt.
   Future<void> postTrainingData(Map<String, dynamic> trainingData) async {
     final response = await http.post(
       Uri.parse('$baseUrl/api/training'),
@@ -100,16 +116,12 @@ class ApiService {
       body: jsonEncode(trainingData),
     );
     if (response.statusCode != 200) {
-      throw Exception('Failed to post training data: ${response.statusCode}');
+      throw Exception(response.body);
     }
   }
 
   // Reporting-Daten (Nutzungshäufigkeit) abrufen
-  Future<List<dynamic>> getReportingData({
-    String? startDate,
-    String? endDate,
-    String? deviceId,
-  }) async {
+  Future<List<dynamic>> getReportingData({String? startDate, String? endDate, String? deviceId}) async {
     List<String> queryParams = [];
     if (startDate != null && endDate != null) {
       queryParams.add("startDate=${Uri.encodeComponent(startDate)}");
@@ -118,8 +130,7 @@ class ApiService {
     if (deviceId != null && deviceId.isNotEmpty) {
       queryParams.add("deviceId=${Uri.encodeComponent(deviceId)}");
     }
-    String queryString =
-        queryParams.isNotEmpty ? "?${queryParams.join("&")}" : "";
+    String queryString = queryParams.isNotEmpty ? "?${queryParams.join("&")}" : "";
     final response = await http.get(Uri.parse('$baseUrl/api/reporting/usage$queryString'));
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body) as Map<String, dynamic>;
@@ -139,11 +150,20 @@ class ApiService {
     }
   }
 
+  // User-Daten abrufen (inkl. EXP-Daten)
+  Future<Map<String, dynamic>> getUserData(int userId) async {
+    final response = await http.get(Uri.parse('$baseUrl/api/user/$userId'));
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body) as Map<String, dynamic>;
+    } else {
+      throw Exception('Failed to get user data: ${response.statusCode}');
+    }
+  }
+
   // -------------------------
   // Trainingspläne
   // -------------------------
 
-  // 1. Trainingsplan erstellen: POST /api/training-plans
   Future<Map<String, dynamic>> createTrainingPlan(int userId, String name) async {
     final response = await http.post(
       Uri.parse('$baseUrl/api/training-plans'),
@@ -157,7 +177,6 @@ class ApiService {
     }
   }
 
-  // 2. Trainingspläne abrufen: GET /api/training-plans/:userId
   Future<List<dynamic>> getTrainingPlans(int userId) async {
     final response = await http.get(Uri.parse('$baseUrl/api/training-plans/$userId'));
     if (response.statusCode == 200) {
@@ -168,9 +187,7 @@ class ApiService {
     }
   }
 
-  // 3. Übungen zum Plan hinzufügen/aktualisieren: PUT /api/training-plans/:planId
-  Future<Map<String, dynamic>> updateTrainingPlan(
-      int planId, List<Map<String, dynamic>> exercises) async {
+  Future<Map<String, dynamic>> updateTrainingPlan(int planId, List<Map<String, dynamic>> exercises) async {
     final response = await http.put(
       Uri.parse('$baseUrl/api/training-plans/$planId'),
       headers: {'Content-Type': 'application/json'},
@@ -183,7 +200,6 @@ class ApiService {
     }
   }
 
-  // 4. Trainingsplan löschen: DELETE /api/training-plans/:planId
   Future<void> deleteTrainingPlan(int planId) async {
     final response = await http.delete(
       Uri.parse('$baseUrl/api/training-plans/$planId'),
@@ -194,7 +210,6 @@ class ApiService {
     }
   }
 
-  // 5. Trainingsplan starten: POST /api/training-plans/:planId/start
   Future<Map<String, dynamic>> startTrainingPlan(int planId) async {
     final response = await http.post(
       Uri.parse('$baseUrl/api/training-plans/$planId/start'),
