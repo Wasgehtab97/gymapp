@@ -1,31 +1,37 @@
-// lib/screens/profile.dart
 import 'package:flutter/material.dart';
-import 'package:table_calendar/table_calendar.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_services.dart';
 import '../widgets/registration_form.dart';
 import '../widgets/login_form.dart';
 import '../widgets/streak_badge.dart';
 import '../widgets/exp_badge.dart';
+import '../widgets/calendar.dart';
+import '../widgets/full_screen_calendar.dart';
+import 'gym.dart';
+import 'rank.dart';
+import 'affiliate_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({Key? key}) : super(key: key);
+  const ProfileScreen({super.key});
   
   @override
-  _ProfileScreenState createState() => _ProfileScreenState();
+  ProfileScreenState createState() => ProfileScreenState();
 }
 
-class _ProfileScreenState extends State<ProfileScreen> {
+class ProfileScreenState extends State<ProfileScreen> {
   String storedUsername = "BeispielNutzer";
   String? token;
   int? userId;
-  int expProgress = 0; // 0 bis 999
-  int divisionIndex = 0; // 0: Bronze 4, 1: Bronze 3, ...
-  bool showCalendar = false;
+  int expProgress = 0;
+  int divisionIndex = 0;
+  bool showCalendar = true;
   List<String> trainingDates = [];
   bool loadingDates = true;
   int streak = 0;
-  bool loadingStreak = true;
+  bool loadingCoachingRequest = true;
+  
+  // Variable für Coaching-Anfragen
+  Map<String, dynamic>? coachingRequest;
   
   final ApiService apiService = ApiService();
   
@@ -33,6 +39,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void initState() {
     super.initState();
     _loadUserInfo();
+  }
+  
+  /// Konvertiert ein Datum in die deutsche Zeitzone (GMT+1) und formatiert als "YYYY-MM-DD".
+  String getGermanDateString(DateTime date) {
+    final germanDate = date.toUtc().add(const Duration(hours: 1));
+    final year = germanDate.year.toString();
+    final month = germanDate.month.toString().padLeft(2, '0');
+    final day = germanDate.day.toString().padLeft(2, '0');
+    return "$year-$month-$day";
   }
   
   Future<void> _loadUserInfo() async {
@@ -48,26 +63,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
       await Future.wait([
         _fetchStreak(),
         _fetchTrainingDates(),
+        _fetchCoachingRequest(),
       ]);
       try {
         final userData = await apiService.getUserData(userId!);
         setState(() {
           expProgress = userData['data']['exp_progress'] ?? 0;
           divisionIndex = userData['data']['division_index'] ?? 0;
+          storedUsername = userData['data']['name'] ?? storedUsername;
         });
         await prefs.setInt('exp_progress', expProgress);
         await prefs.setInt('division_index', divisionIndex);
+        await prefs.setString('username', storedUsername);
       } catch (e) {
         debugPrint("Fehler beim Abrufen der Benutzerdaten: $e");
       }
     }
-  }
-  
-  String getLocalDateString(DateTime date) {
-    final year = date.year.toString();
-    final month = date.month.toString().padLeft(2, '0');
-    final day = date.day.toString().padLeft(2, '0');
-    return "$year-$month-$day";
   }
   
   Future<void> _fetchStreak() async {
@@ -78,10 +89,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       });
     } catch (error) {
       debugPrint("Fehler beim Abrufen des Streaks: $error");
-    } finally {
-      setState(() {
-        loadingStreak = false;
-      });
     }
   }
   
@@ -92,7 +99,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         final dates = (response['data'] as List)
           .map<String>((entry) {
             DateTime d = DateTime.parse(entry['training_date']);
-            return getLocalDateString(d);
+            return getGermanDateString(d);
           })
           .toSet()
           .toList();
@@ -109,6 +116,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
   
+  Future<void> _fetchCoachingRequest() async {
+    try {
+      // Das Abrufen von SharedPreferences entfällt hier, da das Objekt nicht verwendet wird.
+      final response = await apiService.getDataFromUrl('/api/coaching/request?clientId=$userId');
+      if (response['data'] != null && (response['data'] as List).isNotEmpty) {
+        setState(() {
+          coachingRequest = (response['data'] as List)[0];
+        });
+      }
+    } catch (error) {
+      debugPrint("Fehler beim Abrufen der Coaching-Anfrage: $error");
+    } finally {
+      setState(() {
+        loadingCoachingRequest = false;
+      });
+    }
+  }
+  
   Future<void> _handleLogout() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.clear();
@@ -117,36 +142,50 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
   
-  bool _isTrainingDay(DateTime date) {
-    final formatted = getLocalDateString(date);
-    return trainingDates.contains(formatted);
+  Future<void> _acceptCoachingRequest() async {
+    if (coachingRequest == null) return;
+    try {
+      await apiService.respondCoachingRequest(coachingRequest!['id'], true);
+      setState(() {
+        coachingRequest = null;
+      });
+    } catch (error) {
+      debugPrint("Fehler beim Annehmen der Coaching-Anfrage: $error");
+    }
+  }
+  
+  Future<void> _declineCoachingRequest() async {
+    if (coachingRequest == null) return;
+    try {
+      await apiService.respondCoachingRequest(coachingRequest!['id'], false);
+      setState(() {
+        coachingRequest = null;
+      });
+    } catch (error) {
+      debugPrint("Fehler beim Ablehnen der Coaching-Anfrage: $error");
+    }
   }
   
   @override
   Widget build(BuildContext context) {
-    if (token == null) {
+    // Falls kein Token vorhanden ist, zeige Login/Registrierung
+    if (token == null || token!.isEmpty) {
       return Scaffold(
         appBar: AppBar(
-          title: const Text("Login / Registrierung", style: TextStyle(color: Colors.red)),
-          backgroundColor: Colors.black,
-        ),
-        body: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              colors: [Color(0xFF0D0D0D), Color(0xFF1A1A1A), Color(0xFF333333)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
+          title: Text(
+            "Anmeldung / Registrierung",
+            style: Theme.of(context).appBarTheme.titleTextStyle,
           ),
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(16.0),
-            child: const Column(
-              children: [
-                RegistrationForm(),
-                SizedBox(height: 20),
-                LoginForm(),
-              ],
-            ),
+          backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
+        ),
+        body: SingleChildScrollView(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            children: const [
+              LoginForm(),
+              SizedBox(height: 20),
+              RegistrationForm(),
+            ],
           ),
         ),
       );
@@ -154,8 +193,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
     
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Profil", style: TextStyle(color: Colors.red)),
-        backgroundColor: Colors.black,
+        title: Text(
+          "Profil",
+          style: Theme.of(context).appBarTheme.titleTextStyle,
+        ),
+        backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
+        actions: [
+          PopupMenuButton<String>(
+            icon: Icon(Icons.more_vert, color: Theme.of(context).iconTheme.color),
+            onSelected: (value) {
+              if (value == 'logout') {
+                _handleLogout();
+              }
+            },
+            itemBuilder: (BuildContext context) => [
+              PopupMenuItem<String>(
+                value: 'logout',
+                child: Text(
+                  'Abmelden',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
       body: Container(
         decoration: const BoxDecoration(
@@ -171,81 +232,130 @@ class _ProfileScreenState extends State<ProfileScreen> {
               child: SingleChildScrollView(
                 padding: const EdgeInsets.fromLTRB(16, 100, 16, 16),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    const SizedBox(height: 20),
-                    if (showCalendar)
+                    if (coachingRequest != null)
                       Card(
-                        color: Colors.white.withOpacity(0.9),
-                        elevation: 6,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                        color: Colors.blueGrey.shade800,
+                        elevation: 4,
                         margin: const EdgeInsets.symmetric(vertical: 8),
                         child: Padding(
-                          padding: const EdgeInsets.all(16.0),
+                          padding: const EdgeInsets.all(12.0),
                           child: Column(
                             children: [
-                              const Text(
-                                "Trainings-Tage",
-                                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.red),
-                                textAlign: TextAlign.center,
-                              ),
-                              const SizedBox(height: 12),
-                              loadingDates
-                                  ? const Center(child: CircularProgressIndicator())
-                                  : TableCalendar(
-                                      firstDay: DateTime(2000),
-                                      lastDay: DateTime(2100),
-                                      focusedDay: DateTime.now(),
-                                      headerStyle: const HeaderStyle(formatButtonVisible: false),
-                                      calendarBuilders: CalendarBuilders(
-                                        defaultBuilder: (context, date, _) {
-                                          if (_isTrainingDay(date)) {
-                                            return Container(
-                                              margin: const EdgeInsets.all(4.0),
-                                              alignment: Alignment.center,
-                                              decoration: BoxDecoration(
-                                                color: Colors.deepOrange,
-                                                shape: BoxShape.circle,
-                                              ),
-                                              child: Text(
-                                                date.day.toString(),
-                                                style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
-                                              ),
-                                            );
-                                          }
-                                          return null;
-                                        },
-                                      ),
+                              Text(
+                                "Coaching-Anfrage von ${coachingRequest!['coachName'] ?? 'Coach'}",
+                                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
                                     ),
+                              ),
+                              const SizedBox(height: 8),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  ElevatedButton(
+                                    onPressed: _acceptCoachingRequest,
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Theme.of(context).primaryColor,
+                                    ),
+                                    child: Text(
+                                      "Annehmen",
+                                      style: Theme.of(context).textTheme.bodyMedium,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  ElevatedButton(
+                                    onPressed: _declineCoachingRequest,
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Theme.of(context).primaryColor,
+                                    ),
+                                    child: Text(
+                                      "Ablehnen",
+                                      style: Theme.of(context).textTheme.bodyMedium,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ],
                           ),
                         ),
                       ),
                     const SizedBox(height: 20),
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.black,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
+                    if (showCalendar)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 20.0),
+                        child: InkWell(
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => FullScreenCalendar(trainingDates: trainingDates),
+                              ),
+                            );
+                          },
+                          child: Calendar(
+                            trainingDates: trainingDates,
+                          ),
+                        ),
                       ),
-                      onPressed: _handleLogout,
-                      child: const Center(child: Text("Abmelden", style: TextStyle(fontSize: 18, color: Colors.red))),
-                    ),
-                    const SizedBox(height: 20),
                     ElevatedButton(
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.black,
+                        backgroundColor: Theme.of(context).primaryColor,
                         padding: const EdgeInsets.symmetric(vertical: 14),
                       ),
                       onPressed: () {
                         Navigator.pushNamed(context, '/trainingsplan');
                       },
-                      child: const Center(child: Text("Trainingsplan", style: TextStyle(fontSize: 18, color: Colors.red))),
+                      child: Center(
+                        child: Text(
+                          "Trainingsplan",
+                          style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 18),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Theme.of(context).primaryColor,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => GymScreen()),
+                        );
+                      },
+                      child: Center(
+                        child: Text(
+                          "Gym Geräteübersicht",
+                          style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 18),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Theme.of(context).primaryColor,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => const AffiliateScreen()),
+                        );
+                      },
+                      child: Center(
+                        child: Text(
+                          "Deals",
+                          style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 18),
+                        ),
+                      ),
                     ),
                   ],
                 ),
               ),
             ),
-            // Badges: StreakBadge und ExpBadge
             Positioned(
               top: 16,
               right: 16,
@@ -254,17 +364,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 children: [
                   StreakBadge(streak: streak, size: 60),
                   const SizedBox(width: 8),
-                  ExpBadge(expProgress: expProgress, divisionIndex: divisionIndex, size: 60),
+                  ExpBadge(
+                    expProgress: expProgress,
+                    divisionIndex: divisionIndex,
+                    size: 60,
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const RankScreen()),
+                      );
+                    },
+                  ),
                 ],
               ),
             ),
-            // Username oben links
             Positioned(
               top: 16,
               left: 16,
               child: Text(
                 storedUsername,
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.red),
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
               ),
             ),
           ],
@@ -272,7 +391,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
       bottomNavigationBar: Container(
         height: 50,
-        color: Colors.black,
+        color: Theme.of(context).primaryColor,
       ),
     );
   }

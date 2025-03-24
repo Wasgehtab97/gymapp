@@ -1,4 +1,3 @@
-// lib/services/api_service.dart
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -18,8 +17,39 @@ class ApiService {
     }
   }
 
+  // Neues Gerät anlegen (secret_code wird im Backend automatisch generiert)
+  Future<Map<String, dynamic>> createDevice(String name, String exerciseMode) async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('token') ?? '';
+    final response = await http.post(
+      Uri.parse('$baseUrl/api/devices'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({
+        'name': name,
+        'exercise_mode': exerciseMode,
+      }),
+    );
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body) as Map<String, dynamic>;
+    } else {
+      throw Exception('Failed to create device: ${response.statusCode}');
+    }
+  }
+
+  // Neue Methode: Gerät anhand von device_id und secret_code abrufen
+  Future<Map<String, dynamic>> getDeviceBySecret(int deviceId, String secretCode) async {
+    final response = await http.get(Uri.parse('$baseUrl/api/device_by_secret?device_id=$deviceId&secret_code=$secretCode'));
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body)['data'] as Map<String, dynamic>;
+    } else {
+      throw Exception('Failed to get device by secret code: ${response.statusCode}');
+    }
+  }
+
   // Trainingshistorie für einen Nutzer abrufen
-  // Optional: Falls 'exercise' gesetzt ist, wird danach gefiltert, ansonsten nach 'deviceId'.
   Future<List<dynamic>> getHistory(int userId, {int? deviceId, String? exercise}) async {
     String url = '$baseUrl/api/history/$userId';
     List<String> queryParams = [];
@@ -40,7 +70,7 @@ class ApiService {
     }
   }
 
-  // Gerätedaten aktualisieren (nur Admin, Auth-geschützt)
+  // Gerätedaten aktualisieren (nur Admin)
   Future<Map<String, dynamic>> updateDevice(int deviceId, String name, String exerciseMode) async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('token') ?? '';
@@ -50,10 +80,7 @@ class ApiService {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer $token',
       },
-      body: jsonEncode({
-        'name': name,
-        'exercise_mode': exerciseMode,
-      }),
+      body: jsonEncode({'name': name, 'exercise_mode': exerciseMode}),
     );
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body) as Map<String, dynamic>;
@@ -72,7 +99,7 @@ class ApiService {
         'name': name,
         'email': email,
         'password': password,
-        'membershipNumber': membershipNumber,
+        'membershipNumber': membershipNumber
       }),
     );
     if (response.statusCode == 200) {
@@ -82,15 +109,12 @@ class ApiService {
     }
   }
 
-  // Benutzer-Login inkl. EXP-Daten (exp_progress und division_index)
+  // Benutzer-Login inkl. EXP-Daten
   Future<Map<String, dynamic>> loginUser(String email, String password) async {
     final response = await http.post(
       Uri.parse('$baseUrl/api/login'),
       headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        'email': email,
-        'password': password,
-      }),
+      body: jsonEncode({'email': email, 'password': password}),
     );
     if (response.statusCode == 200) {
       final result = jsonDecode(response.body) as Map<String, dynamic>;
@@ -107,8 +131,7 @@ class ApiService {
     }
   }
 
-  // Trainingsdaten posten – überträgt auch den Übungsnamen, falls vorhanden.
-  // Wir werfen den Response-Body als Exception, falls ein Fehler auftritt.
+  // Trainingsdaten posten
   Future<void> postTrainingData(Map<String, dynamic> trainingData) async {
     final response = await http.post(
       Uri.parse('$baseUrl/api/training'),
@@ -120,7 +143,7 @@ class ApiService {
     }
   }
 
-  // Reporting-Daten (Nutzungshäufigkeit) abrufen
+  // Reporting-Daten abrufen
   Future<List<dynamic>> getReportingData({String? startDate, String? endDate, String? deviceId}) async {
     List<String> queryParams = [];
     if (startDate != null && endDate != null) {
@@ -140,7 +163,7 @@ class ApiService {
     }
   }
 
-  // Allgemeine Methode zum Abrufen von Daten (z.B. für den Streak)
+  // Allgemeine Daten abrufen (z.B. Streak)
   Future<Map<String, dynamic>> getDataFromUrl(String endpoint) async {
     final response = await http.get(Uri.parse('$baseUrl$endpoint'));
     if (response.statusCode == 200) {
@@ -150,7 +173,7 @@ class ApiService {
     }
   }
 
-  // User-Daten abrufen (inkl. EXP-Daten)
+  // User-Daten abrufen
   Future<Map<String, dynamic>> getUserData(int userId) async {
     final response = await http.get(Uri.parse('$baseUrl/api/user/$userId'));
     if (response.statusCode == 200) {
@@ -160,10 +183,7 @@ class ApiService {
     }
   }
 
-  // -------------------------
-  // Trainingspläne
-  // -------------------------
-
+  // Trainingspläne erstellen
   Future<Map<String, dynamic>> createTrainingPlan(int userId, String name) async {
     final response = await http.post(
       Uri.parse('$baseUrl/api/training-plans'),
@@ -177,6 +197,7 @@ class ApiService {
     }
   }
 
+  // Trainingspläne abrufen
   Future<List<dynamic>> getTrainingPlans(int userId) async {
     final response = await http.get(Uri.parse('$baseUrl/api/training-plans/$userId'));
     if (response.statusCode == 200) {
@@ -187,6 +208,7 @@ class ApiService {
     }
   }
 
+  // Trainingsplan aktualisieren
   Future<Map<String, dynamic>> updateTrainingPlan(int planId, List<Map<String, dynamic>> exercises) async {
     final response = await http.put(
       Uri.parse('$baseUrl/api/training-plans/$planId'),
@@ -200,6 +222,7 @@ class ApiService {
     }
   }
 
+  // Trainingsplan löschen
   Future<void> deleteTrainingPlan(int planId) async {
     final response = await http.delete(
       Uri.parse('$baseUrl/api/training-plans/$planId'),
@@ -210,6 +233,7 @@ class ApiService {
     }
   }
 
+  // Trainingsplan starten
   Future<Map<String, dynamic>> startTrainingPlan(int planId) async {
     final response = await http.post(
       Uri.parse('$baseUrl/api/training-plans/$planId/start'),
@@ -219,6 +243,194 @@ class ApiService {
       return jsonDecode(response.body) as Map<String, dynamic>;
     } else {
       throw Exception('Failed to start training plan: ${response.statusCode}');
+    }
+  }
+
+  // ---------------------------
+  // Neue Methoden für das Coach-Feature
+  // ---------------------------
+
+  // 1. Alle Klienten für einen Coach abrufen
+  Future<List<dynamic>> getClientsForCoach() async {
+    final prefs = await SharedPreferences.getInstance();
+    final coachId = prefs.getInt('userId');
+    final token = prefs.getString('token') ?? '';
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/coach/clients?coachId=$coachId'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+    );
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      return data['data'];
+    } else {
+      throw Exception('Failed to load clients: ${response.statusCode}');
+    }
+  }
+
+  // 2. Coaching-Anfrage senden per ID
+  Future<void> sendCoachingRequest(int clientId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final coachId = prefs.getInt('userId');
+    final token = prefs.getString('token') ?? '';
+    final response = await http.post(
+      Uri.parse('$baseUrl/api/coaching/request'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({
+        'coachId': coachId,
+        'clientId': clientId,
+      }),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Coaching request failed: ${response.statusCode}');
+    }
+  }
+
+  // 2a. Coaching-Anfrage senden per Mitgliedsnummer
+  Future<void> sendCoachingRequestByMembership(String membershipNumber) async {
+    final prefs = await SharedPreferences.getInstance();
+    final coachId = prefs.getInt('userId');
+    final token = prefs.getString('token') ?? '';
+    final response = await http.post(
+      Uri.parse('$baseUrl/api/coaching/request/by-membership'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({
+        'coachId': coachId,
+        'membershipNumber': membershipNumber,
+      }),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Coaching request failed: ${response.statusCode}');
+    }
+  }
+
+  // 3. Auf Coaching-Anfrage antworten (akzeptieren/ablehnen)
+  Future<void> respondCoachingRequest(int requestId, bool accept) async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('token') ?? '';
+    final response = await http.put(
+      Uri.parse('$baseUrl/api/coaching/request/$requestId'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({
+        'status': accept ? 'accepted' : 'rejected',
+      }),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Responding to coaching request failed: ${response.statusCode}');
+    }
+  }
+
+  // 4. Trainingshistorie eines Clients abrufen
+  Future<List<dynamic>> fetchClientHistory(int clientId, {int? deviceId, String? exercise}) async {
+    String url = '$baseUrl/api/history/$clientId';
+    List<String> queryParams = [];
+    if (exercise != null && exercise.isNotEmpty) {
+      queryParams.add("exercise=${Uri.encodeComponent(exercise)}");
+    } else if (deviceId != null) {
+      queryParams.add("deviceId=$deviceId");
+    }
+    if (queryParams.isNotEmpty) {
+      url += '?' + queryParams.join('&');
+    }
+    final response = await http.get(Uri.parse(url));
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      return data['data'];
+    } else {
+      throw Exception('Failed to load client history: ${response.statusCode}');
+    }
+  }
+
+  // 5. Einen neuen Trainingsplan für einen Client erstellen
+  Future<Map<String, dynamic>> createTrainingPlanForClient(int clientId, String name) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/api/coach/training-plans'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'clientId': clientId, 'name': name}),
+    );
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body) as Map<String, dynamic>;
+    } else {
+      throw Exception('Failed to create training plan for client: ${response.statusCode}');
+    }
+  }
+
+  // 6. Einen existierenden Trainingsplan eines Clients aktualisieren
+  Future<Map<String, dynamic>> updateTrainingPlanForClient(int planId, List<Map<String, dynamic>> exercises) async {
+    final response = await http.put(
+      Uri.parse('$baseUrl/api/coach/training-plans/$planId'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'exercises': exercises}),
+    );
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body) as Map<String, dynamic>;
+    } else {
+      throw Exception('Failed to update training plan for client: ${response.statusCode}');
+    }
+  }
+
+  // Neuer API-Aufruf: Alle registrierten Nutzer abrufen
+  Future<List<dynamic>> getAllUsers() async {
+    final response = await http.get(Uri.parse('$baseUrl/api/users'));
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      return data['data'];
+    } else {
+      throw Exception('Failed to load users: ${response.statusCode}');
+    }
+  }
+
+  // ---------------------------
+  // Neue Methoden für Affiliate-Funktionalität
+  // ---------------------------
+
+  // Affiliate-Angebote abrufen (Dummy-Daten mit lokalen Bildern)
+  Future<List<dynamic>> getAffiliateOffers() async {
+    await Future.delayed(const Duration(seconds: 1));
+    return [
+      {
+        "id": 1,
+        "title": "Supplements Special",
+        "description": "Erhalte 20% Rabatt auf Supplements",
+        "affiliate_url": "https://www.example.com/offer1",
+        "image_url": "assets/images/creatine.png",
+        "start_date": "2025-03-01",
+        "end_date": "2025-12-31",
+        "revenue_share": 50,
+      },
+      {
+        "id": 2,
+        "title": "Sportbekleidung Deal",
+        "description": "Kaufe Sportbekleidung mit 15% Rabatt",
+        "affiliate_url": "https://www.example.com/offer2",
+        "image_url": "assets/images/clothing.png",
+        "start_date": "2025-03-01",
+        "end_date": "2025-12-31",
+        "revenue_share": 50,
+      },
+    ];
+  }
+
+  // Affiliate-Klicks tracken
+  Future<void> trackAffiliateClick(int offerId) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/api/affiliate_click'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'offer_id': offerId}),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Failed to track click: ${response.statusCode}');
     }
   }
 }

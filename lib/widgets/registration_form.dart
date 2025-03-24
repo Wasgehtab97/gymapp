@@ -1,4 +1,3 @@
-// lib/widgets/registration_form.dart
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -31,7 +30,6 @@ class _RegistrationFormState extends State<RegistrationForm> {
     final password = _passwordController.text;
     final confirmPassword = _confirmController.text;
     
-    // Überprüfen, ob Passwörter übereinstimmen
     if (password != confirmPassword) {
       setState(() {
         _error = 'Die Passwörter stimmen nicht überein.';
@@ -39,7 +37,6 @@ class _RegistrationFormState extends State<RegistrationForm> {
       return;
     }
     
-    // Validierung der Mitgliedsnummer
     final memberNumInt = int.tryParse(membershipNumber);
     if (memberNumInt == null || memberNumInt < 1 || memberNumInt > 3000) {
       setState(() {
@@ -65,7 +62,6 @@ class _RegistrationFormState extends State<RegistrationForm> {
           _success = result['message'] ?? 'Registrierung erfolgreich!';
           _error = '';
         });
-        // Felder zurücksetzen
         _nameController.clear();
         _emailController.clear();
         _membershipController.clear();
@@ -90,14 +86,25 @@ class _RegistrationFormState extends State<RegistrationForm> {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        const Text(
+        Text(
           'Registrierung',
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          style: Theme.of(context)
+              .textTheme
+              .titleLarge
+              ?.copyWith(fontWeight: FontWeight.bold),
         ),
         if (_error.isNotEmpty)
-          Text(_error, style: const TextStyle(color: Colors.red)),
+          Text(_error,
+              style: Theme.of(context)
+                  .textTheme
+                  .bodyMedium
+                  ?.copyWith(color: Colors.red)),
         if (_success.isNotEmpty)
-          Text(_success, style: const TextStyle(color: Colors.green)),
+          Text(_success,
+              style: Theme.of(context)
+                  .textTheme
+                  .bodyMedium
+                  ?.copyWith(color: Colors.green)),
         Form(
           key: _formKey,
           child: Column(
@@ -173,7 +180,8 @@ class _RegistrationFormState extends State<RegistrationForm> {
               const SizedBox(height: 16),
               ElevatedButton(
                 onPressed: _handleRegistration,
-                child: const Text('Registrieren'),
+                child: Text('Registrieren',
+                    style: Theme.of(context).textTheme.bodyMedium),
               ),
             ],
           ),

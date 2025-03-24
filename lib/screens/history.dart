@@ -1,14 +1,13 @@
-// lib/screens/history.dart
 import 'package:flutter/material.dart';
-import 'package:fl_chart/fl_chart.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:fl_chart/fl_chart.dart';
 import '../services/api_services.dart';
 
 class HistoryScreen extends StatefulWidget {
-  const HistoryScreen({Key? key}) : super(key: key);
+  const HistoryScreen({super.key});
 
   @override
-  _HistoryScreenState createState() => _HistoryScreenState();
+  State<HistoryScreen> createState() => _HistoryScreenState();
 }
 
 class _HistoryScreenState extends State<HistoryScreen> {
@@ -26,12 +25,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
   Future<void> _loadUserAndFetchHistory() async {
     final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
     setState(() {
       userId = prefs.getInt('userId');
     });
     final args = ModalRoute.of(context)?.settings.arguments;
     if (args is Map) {
-      // Hier erwarten wir deviceId und optional exercise
       deviceId = args['deviceId'];
       if (args.containsKey('exercise')) {
         exercise = args['exercise'];
@@ -39,44 +38,27 @@ class _HistoryScreenState extends State<HistoryScreen> {
     } else if (args is int) {
       deviceId = args;
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Ungültige Geräte-ID")),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Ungültige Geräte-ID")),
+        );
+      }
       return;
     }
     if (userId != null) {
-      _fetchHistory();
+      await _fetchHistory();
     }
   }
 
-  Future<void> _fetchHistory() async {
-    try {
-      // Rufe die Trainingshistorie ab – falls ein Übungsname gesetzt ist, wird dieser genutzt, sonst die deviceId
-      final data = await ApiService().getHistory(
-        userId!,
-        deviceId: deviceId,
-        exercise: exercise,
-      );
-      setState(() {
-        historyData = data;
-        isLoading = false;
-      });
-    } catch (error) {
-      setState(() {
-        isLoading = false;
-      });
-      debugPrint("Fehler beim Abrufen der Trainingshistorie: $error");
-    }
-  }
-
+  /// Parst das Datum, rechnet in UTC+1 um und formatiert als "YYYY-MM-DD".
   String _formatLocalDate(dynamic dateInput) {
     DateTime d;
     if (dateInput is String) {
-      d = DateTime.parse(dateInput);
+      d = DateTime.parse(dateInput).toUtc().add(const Duration(hours: 1));
     } else if (dateInput is DateTime) {
-      d = dateInput;
+      d = dateInput.toUtc().add(const Duration(hours: 1));
     } else {
-      d = DateTime.now();
+      d = DateTime.now().toUtc().add(const Duration(hours: 1));
     }
     String pad(int n) => n.toString().padLeft(2, '0');
     return "${d.year}-${pad(d.month)}-${pad(d.day)}";
@@ -97,12 +79,31 @@ class _HistoryScreenState extends State<HistoryScreen> {
     return dates;
   }
 
+  Future<void> _fetchHistory() async {
+    try {
+      final data = await ApiService().getHistory(
+        userId!,
+        deviceId: deviceId,
+        exercise: exercise,
+      );
+      if (!mounted) return;
+      setState(() {
+        historyData = data;
+        isLoading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        isLoading = false;
+      });
+      debugPrint("Fehler beim Abrufen der Trainingshistorie: $error");
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final groupedData = _groupHistoryByDate();
     final sortedDates = _getSortedDates(groupedData);
-
-    // Diagramm-Daten: Berechne für jedes Datum einen gewichteten Durchschnitt (1RM-Schätzwert)
     List<String> chartLabels = sortedDates;
     List<double> chartDataPoints = sortedDates.map((date) {
       final sessions = groupedData[date]!;
@@ -114,14 +115,16 @@ class _HistoryScreenState extends State<HistoryScreen> {
         totalWeighted1RM += weight * (1 + reps / 30) * reps;
         totalReps += reps;
       }
-      double weightedAvg1RM = totalReps > 0 ? totalWeighted1RM / totalReps : 0.0;
-      return weightedAvg1RM;
+      return totalReps > 0 ? totalWeighted1RM / totalReps : 0.0;
     }).toList();
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Trainingshistorie', style: TextStyle(color: Colors.red)),
-        backgroundColor: Colors.black,
+        title: Text(
+          'Trainingshistorie',
+          style: Theme.of(context).appBarTheme.titleTextStyle,
+        ),
+        backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
       ),
       body: Container(
         decoration: const BoxDecoration(
@@ -138,13 +141,13 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const Text(
+                    Text(
                       'Leistungsverlauf',
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.red,
-                      ),
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                            color: Theme.of(context).colorScheme.secondary,
+                          ),
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 16),
@@ -173,7 +176,14 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                           space: 4,
                                           child: Text(
                                             chartLabels[index],
-                                            style: const TextStyle(fontSize: 10, color: Colors.red),
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .bodyMedium
+                                                ?.copyWith(
+                                                  fontSize: 10,
+                                                  color: Theme.of(context)
+                                                      .colorScheme.secondary,
+                                                ),
                                           ),
                                         );
                                       }
@@ -187,7 +197,14 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                     interval: 10,
                                     getTitlesWidget: (value, meta) => Text(
                                       value.toInt().toString(),
-                                      style: const TextStyle(fontSize: 10, color: Colors.red),
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodyMedium
+                                          ?.copyWith(
+                                            fontSize: 10,
+                                            color: Theme.of(context)
+                                                .colorScheme.secondary,
+                                          ),
                                     ),
                                   ),
                                 ),
@@ -204,7 +221,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                 LineChartBarData(
                                   spots: List.generate(
                                     chartDataPoints.length,
-                                    (index) => FlSpot(index.toDouble(), chartDataPoints[index]),
+                                    (index) => FlSpot(
+                                      index.toDouble(),
+                                      chartDataPoints[index],
+                                    ),
                                   ),
                                   isCurved: true,
                                   color: Colors.teal,
@@ -236,27 +256,83 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                 children: [
                                   Text(
                                     date,
-                                    style: const TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.red,
-                                    ),
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleLarge
+                                        ?.copyWith(
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.bold,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .secondary,
+                                        ),
                                   ),
                                   const SizedBox(height: 8),
                                   SingleChildScrollView(
                                     scrollDirection: Axis.horizontal,
                                     child: DataTable(
-                                      columns: const [
-                                        DataColumn(label: Text('Satz', style: TextStyle(color: Colors.red))),
-                                        DataColumn(label: Text('Kg', style: TextStyle(color: Colors.red))),
-                                        DataColumn(label: Text('Wdh', style: TextStyle(color: Colors.red))),
+                                      columns: [
+                                        DataColumn(
+                                          label: Text(
+                                            'Satz',
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .bodyMedium
+                                                ?.copyWith(
+                                                  fontSize: 10,
+                                                  color: Theme.of(context)
+                                                      .colorScheme.secondary,
+                                                ),
+                                          ),
+                                        ),
+                                        DataColumn(
+                                          label: Text(
+                                            'Kg',
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .bodyMedium
+                                                ?.copyWith(
+                                                  fontSize: 10,
+                                                  color: Theme.of(context)
+                                                      .colorScheme.secondary,
+                                                ),
+                                          ),
+                                        ),
+                                        DataColumn(
+                                          label: Text(
+                                            'Wdh',
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .bodyMedium
+                                                ?.copyWith(
+                                                  fontSize: 10,
+                                                  color: Theme.of(context)
+                                                      .colorScheme.secondary,
+                                                ),
+                                          ),
+                                        ),
                                       ],
                                       rows: sessions.map<DataRow>((entry) {
                                         return DataRow(
                                           cells: [
-                                            DataCell(Text(entry['sets'].toString(), style: const TextStyle(color: Colors.red))),
-                                            DataCell(Text(entry['weight'].toString(), style: const TextStyle(color: Colors.red))),
-                                            DataCell(Text(entry['reps'].toString(), style: const TextStyle(color: Colors.red))),
+                                            DataCell(Text(
+                                              entry['sets'].toString(),
+                                              style: Theme.of(context)
+                                                  .textTheme
+                                                  .bodyMedium,
+                                            )),
+                                            DataCell(Text(
+                                              entry['weight'].toString(),
+                                              style: Theme.of(context)
+                                                  .textTheme
+                                                  .bodyMedium,
+                                            )),
+                                            DataCell(Text(
+                                              entry['reps'].toString(),
+                                              style: Theme.of(context)
+                                                  .textTheme
+                                                  .bodyMedium,
+                                            )),
                                           ],
                                         );
                                       }).toList(),
@@ -269,7 +345,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
                         }).toList(),
                       )
                     else
-                      const Center(child: Text("Keine Trainingshistorie vorhanden.", style: TextStyle(color: Colors.red))),
+                      Center(
+                        child: Text(
+                          "Keine Trainingshistorie vorhanden.",
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                      ),
                   ],
                 ),
               ),

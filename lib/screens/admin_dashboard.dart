@@ -1,7 +1,7 @@
-// lib/screens/admin_dashboard.dart
 import 'package:flutter/material.dart';
 import '../services/api_services.dart';
 import '../widgets/device_update_form.dart';
+import '../widgets/device_create_form.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -26,7 +26,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   Future<void> _fetchDevices() async {
     try {
       final fetchedDevices = await apiService.getDevices();
-      // Optionale Sortierung – sortiere nach 'order' oder ID
+      // Sortiere nach 'order' oder ID
       fetchedDevices.sort((a, b) {
         var orderA = a['order'] ?? a['id'];
         var orderB = b['order'] ?? b['id'];
@@ -55,9 +55,23 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     });
   }
 
+  void _handleDeviceCreate(Map<String, dynamic> newDevice) {
+    setState(() {
+      devices.add(newDevice);
+    });
+  }
+
+  void _showCreateDeviceDialog() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return DeviceCreateForm(onCreated: _handleDeviceCreate);
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    // Filtere die Geräte anhand des Suchbegriffs (unabhängig von Groß-/Kleinschreibung)
     final filteredDevices = devices.where((device) {
       final name = device['name'].toString().toLowerCase();
       return name.contains(filterQuery.toLowerCase());
@@ -65,11 +79,15 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Admin-Dashboard', style: TextStyle(color: Colors.red)),
-        backgroundColor: Colors.black,
+        title: Text(
+          'Admin-Dashboard',
+          style: Theme.of(context).appBarTheme.titleTextStyle,
+        ),
+        backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
       ),
       body: Container(
         decoration: const BoxDecoration(
+          // Den Gradient kannst du in Zukunft auch zentral definieren
           gradient: LinearGradient(
             colors: [Color(0xFF0D0D0D), Color(0xFF1A1A1A)],
             begin: Alignment.topLeft,
@@ -84,26 +102,33 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
+                      Text(
                         'Geräteübersicht',
-                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.red),
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: Theme.of(context).colorScheme.secondary,
+                            ),
                       ),
                       const SizedBox(height: 16),
                       // Filter-Input
                       Row(
                         children: [
-                          const Text(
+                          Text(
                             'Gerät suchen:',
-                            style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red),
+                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  color: Theme.of(context).colorScheme.secondary,
+                                ),
                           ),
                           const SizedBox(width: 8),
                           Expanded(
                             child: TextField(
-                              style: const TextStyle(color: Colors.red),
-                              decoration: const InputDecoration(
+                              style: Theme.of(context).textTheme.bodyMedium,
+                              decoration: InputDecoration(
                                 hintText: 'z. B. Benchpress',
-                                hintStyle: TextStyle(color: Colors.redAccent),
-                                border: OutlineInputBorder(),
+                                hintStyle: Theme.of(context).inputDecorationTheme.hintStyle,
+                                border: Theme.of(context).inputDecorationTheme.border,
                               ),
                               onChanged: (value) {
                                 setState(() {
@@ -115,11 +140,20 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                         ],
                       ),
                       const SizedBox(height: 16),
-                      // Anzeige der Geräte
                       if (devices.isEmpty)
-                        const Text("Keine Geräte verfügbar.", style: TextStyle(color: Colors.red))
+                        Text(
+                          "Keine Geräte verfügbar.",
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                color: Theme.of(context).colorScheme.secondary,
+                              ),
+                        )
                       else if (filteredDevices.isEmpty)
-                        Text("Keine Geräte gefunden, die \"$filterQuery\" enthalten.", style: const TextStyle(color: Colors.red))
+                        Text(
+                          "Keine Geräte gefunden, die \"$filterQuery\" enthalten.",
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                color: Theme.of(context).colorScheme.secondary,
+                              ),
+                        )
                       else
                         ListView.builder(
                           shrinkWrap: true,
@@ -135,7 +169,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                               child: ListTile(
                                 title: Text(
                                   '${device['name']} ($exerciseMode)',
-                                  style: const TextStyle(color: Colors.red),
+                                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                        color: Theme.of(context).colorScheme.secondary,
+                                      ),
                                 ),
                                 trailing: ElevatedButton(
                                   onPressed: () {
@@ -143,22 +179,32 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                                       editingDevice = device;
                                     });
                                   },
-                                  style: ElevatedButton.styleFrom(backgroundColor: Colors.black),
-                                  child: const Text('Bearbeiten', style: TextStyle(color: Colors.red)),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Theme.of(context).primaryColor,
+                                  ),
+                                  child: Text(
+                                    'Bearbeiten',
+                                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                          color: Theme.of(context).colorScheme.secondary,
+                                        ),
+                                  ),
                                 ),
                               ),
                             );
                           },
                         ),
                       const SizedBox(height: 16),
-                      // Bearbeitungsbereich für ein ausgewähltes Gerät
                       if (editingDevice != null)
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
                               'Bearbeite: ${editingDevice!['name']}',
-                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.red),
+                              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: Theme.of(context).colorScheme.secondary,
+                                  ),
                             ),
                             const SizedBox(height: 8),
                             DeviceUpdateForm(
@@ -173,8 +219,15 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                                   editingDevice = null;
                                 });
                               },
-                              style: ElevatedButton.styleFrom(backgroundColor: Colors.black),
-                              child: const Text('Schließen', style: TextStyle(color: Colors.red)),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Theme.of(context).primaryColor,
+                              ),
+                              child: Text(
+                                'Schließen',
+                                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                      color: Theme.of(context).colorScheme.secondary,
+                                    ),
+                              ),
                             ),
                           ],
                         ),
@@ -182,6 +235,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   ),
                 ),
         ),
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _showCreateDeviceDialog,
+        backgroundColor: Theme.of(context).primaryColor,
+        child: Icon(Icons.add, color: Theme.of(context).colorScheme.secondary),
       ),
     );
   }

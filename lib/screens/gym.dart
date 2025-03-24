@@ -1,4 +1,3 @@
-// lib/screens/gym.dart
 import 'package:flutter/material.dart';
 import '../services/api_services.dart';
 
@@ -38,29 +37,29 @@ class _GymScreenState extends State<GymScreen> {
     }
   }
 
-  // Zeigt eine Auswahl der drei Grundübungen an
+  // Zeigt ein Bottom Sheet mit den drei Grundübungen (nur bei Geräten im "multiple" mode)
   void _showExerciseSelection(dynamic device) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.black,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       builder: (context) {
         return Container(
           padding: const EdgeInsets.all(16),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text(
+              Text(
                 "Wähle eine Übung",
-                style: TextStyle(
-                  fontSize: 18,
-                  color: Colors.red,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(context).colorScheme.secondary,
+                    ),
               ),
               const SizedBox(height: 16),
               ListTile(
-                leading: const Icon(Icons.fitness_center, color: Colors.red),
-                title: const Text("Bankdrücken", style: TextStyle(color: Colors.red)),
+                leading: Icon(Icons.fitness_center, color: Theme.of(context).colorScheme.secondary),
+                title: Text("Bankdrücken", style: Theme.of(context).textTheme.bodyMedium),
                 onTap: () {
                   Navigator.pop(context);
                   Navigator.pushNamed(
@@ -74,8 +73,8 @@ class _GymScreenState extends State<GymScreen> {
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.fitness_center, color: Colors.red),
-                title: const Text("Kniebeugen", style: TextStyle(color: Colors.red)),
+                leading: Icon(Icons.fitness_center, color: Theme.of(context).colorScheme.secondary),
+                title: Text("Kniebeugen", style: Theme.of(context).textTheme.bodyMedium),
                 onTap: () {
                   Navigator.pop(context);
                   Navigator.pushNamed(
@@ -89,8 +88,8 @@ class _GymScreenState extends State<GymScreen> {
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.fitness_center, color: Colors.red),
-                title: const Text("Kreuzheben", style: TextStyle(color: Colors.red)),
+                leading: Icon(Icons.fitness_center, color: Theme.of(context).colorScheme.secondary),
+                title: Text("Kreuzheben", style: Theme.of(context).textTheme.bodyMedium),
                 onTap: () {
                   Navigator.pop(context);
                   Navigator.pushNamed(
@@ -119,12 +118,12 @@ class _GymScreenState extends State<GymScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
+        title: Text(
           'Gym Geräteübersicht',
-          style: TextStyle(color: Colors.red),
+          style: Theme.of(context).appBarTheme.titleTextStyle,
         ),
         centerTitle: true,
-        backgroundColor: Colors.black,
+        backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
         elevation: 4,
       ),
       body: Container(
@@ -140,19 +139,23 @@ class _GymScreenState extends State<GymScreen> {
             padding: const EdgeInsets.all(16.0),
             child: Column(
               children: [
+                // Suchleiste
                 Container(
                   decoration: BoxDecoration(
                     color: Colors.grey.shade800,
                     borderRadius: BorderRadius.circular(30),
                   ),
                   child: TextField(
-                    style: const TextStyle(color: Colors.white),
+                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: Colors.white),
                     decoration: InputDecoration(
                       hintText: 'Gerät suchen...',
-                      hintStyle: const TextStyle(color: Colors.white54),
+                      hintStyle: Theme.of(context).inputDecorationTheme.hintStyle,
                       border: InputBorder.none,
                       contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                      prefixIcon: Icon(Icons.search, color: Colors.red.shade300),
+                      prefixIcon: Icon(
+                        Icons.search,
+                        color: Theme.of(context).colorScheme.secondary.withOpacity(0.7),
+                      ),
                     ),
                     onChanged: (value) {
                       setState(() {
@@ -166,24 +169,24 @@ class _GymScreenState extends State<GymScreen> {
                   child: isLoading
                       ? const Center(child: CircularProgressIndicator())
                       : filteredDevices.isEmpty
-                          ? const Center(
+                          ? Center(
                               child: Text(
-                              'Keine Geräte gefunden.',
-                              style: TextStyle(color: Colors.white),
-                            ))
+                                'Keine Geräte gefunden.',
+                                style: Theme.of(context).textTheme.bodyLarge,
+                              ),
+                            )
                           : GridView.builder(
                               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount: 2,
-                                crossAxisSpacing: 16,
-                                mainAxisSpacing: 16,
-                                childAspectRatio: 3 / 2,
+                                crossAxisCount: 3,
+                                crossAxisSpacing: 8,
+                                mainAxisSpacing: 8,
+                                childAspectRatio: 1,
                               ),
                               itemCount: filteredDevices.length,
                               itemBuilder: (context, index) {
                                 final device = filteredDevices[index];
                                 return GestureDetector(
                                   onTap: () {
-                                    // Prüfe den exercise_mode
                                     if (device['exercise_mode'] == 'multiple') {
                                       _showExerciseSelection(device);
                                     } else {
@@ -202,8 +205,11 @@ class _GymScreenState extends State<GymScreen> {
                                     child: Container(
                                       decoration: BoxDecoration(
                                         borderRadius: BorderRadius.circular(16),
-                                        gradient: const LinearGradient(
-                                          colors: [Color(0xFFFFEBEE), Color(0xFFC62828)],
+                                        gradient: LinearGradient(
+                                          colors: [
+                                            Theme.of(context).colorScheme.secondary.withOpacity(0.2),
+                                            Theme.of(context).colorScheme.secondary,
+                                          ],
                                           begin: Alignment.topLeft,
                                           end: Alignment.bottomRight,
                                         ),
@@ -213,20 +219,20 @@ class _GymScreenState extends State<GymScreen> {
                                         children: [
                                           const Icon(
                                             Icons.fitness_center,
-                                            size: 48,
+                                            size: 36,
                                             color: Colors.white,
                                           ),
-                                          const SizedBox(height: 8),
+                                          const SizedBox(height: 4),
                                           Padding(
-                                            padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                                            padding: const EdgeInsets.symmetric(horizontal: 4.0),
                                             child: Text(
                                               device['name'],
                                               textAlign: TextAlign.center,
-                                              style: const TextStyle(
-                                                fontSize: 16,
-                                                fontWeight: FontWeight.bold,
-                                                color: Colors.white,
-                                              ),
+                                              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                                                    fontSize: 14,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: Colors.white,
+                                                  ),
                                             ),
                                           ),
                                         ],
@@ -244,7 +250,7 @@ class _GymScreenState extends State<GymScreen> {
       ),
       bottomNavigationBar: Container(
         height: 50,
-        color: Colors.black,
+        color: Theme.of(context).primaryColor,
       ),
     );
   }

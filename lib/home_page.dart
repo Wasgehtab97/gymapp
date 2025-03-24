@@ -1,10 +1,9 @@
-// lib/home_page.dart
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'screens/gym.dart';
 import 'screens/profile.dart';
-import 'screens/report_dashboard.dart';  // Korrekte Datei
+import 'screens/report_dashboard.dart';
 import 'screens/admin_dashboard.dart';
+import 'screens/coach_dashboard.dart'; // Neuer Coach-Screen importieren
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -18,27 +17,27 @@ class _HomePageState extends State<HomePage> {
   String? userRole;
   bool _roleLoaded = false;
 
+  // Standardseiten (Profil, Reporting)
   final List<Widget> _defaultPages = [
-    GymScreen(),
-    ProfileScreen(),
-    ReportDashboardScreen(), // Korrekt
+    const ProfileScreen(),
+    ReportDashboardScreen(),
   ];
 
+  // Extra-Seiten für Admin und Coach
   final Widget _adminPage = AdminDashboardScreen();
+  final Widget _coachPage = const CoachDashboardScreen();
 
   List<Widget> get _pages {
     if (userRole == 'admin') {
       return [..._defaultPages, _adminPage];
+    } else if (userRole == 'coach') {
+      return [..._defaultPages, _coachPage];
     }
     return _defaultPages;
   }
 
   List<BottomNavigationBarItem> get _navigationItems {
     List<BottomNavigationBarItem> items = [
-      const BottomNavigationBarItem(
-        icon: Icon(Icons.fitness_center),
-        label: 'Gym',
-      ),
       const BottomNavigationBarItem(
         icon: Icon(Icons.person),
         label: 'Profil',
@@ -53,6 +52,13 @@ class _HomePageState extends State<HomePage> {
         const BottomNavigationBarItem(
           icon: Icon(Icons.admin_panel_settings),
           label: 'Admin',
+        ),
+      );
+    } else if (userRole == 'coach') {
+      items.add(
+        const BottomNavigationBarItem(
+          icon: Icon(Icons.supervisor_account),
+          label: 'Coach',
         ),
       );
     }

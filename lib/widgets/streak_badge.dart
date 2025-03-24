@@ -8,12 +8,20 @@ class StreakBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Verwende zentrales Theme für Farben und Textstile:
+    final borderColor = Theme.of(context).dividerColor;
+    final iconColor = Theme.of(context).colorScheme.secondary;
+    final textStyle = Theme.of(context).textTheme.bodyLarge?.copyWith(
+      fontSize: size * 0.33,
+      fontWeight: FontWeight.bold,
+    );
+
     return Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        border: Border.all(color: Colors.black, width: 2),
+        border: Border.all(color: borderColor, width: 2),
       ),
       child: Stack(
         alignment: Alignment.center,
@@ -21,15 +29,11 @@ class StreakBadge extends StatelessWidget {
           Icon(
             Icons.local_fire_department,
             size: size * 0.8,
-            color: Colors.deepOrange,
+            color: iconColor,
           ),
           Text(
             streak.toString(),
-            style: TextStyle(
-              fontSize: size * 0.33,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-            ),
+            style: textStyle,
           ),
         ],
       ),

@@ -1,14 +1,12 @@
-// lib/screens/dashboard.dart
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_services.dart';
-import '../widgets/feedback_form.dart';
+import '../widgets/feedback_form.dart'; // WICHTIG: FeedbackForm importieren
 
 class DashboardScreen extends StatefulWidget {
   final List<int>? activeTrainingPlan;
   final int? currentIndex;
   final int? deviceId;
-  // Gewählte Übung (z.B. Bankdrücken)
   final String? exercise;
 
   const DashboardScreen({
@@ -24,7 +22,6 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  // Trainingsdaten: Jeder Satz enthält Satznummer, Gewicht und Wiederholungen.
   List<Map<String, dynamic>> setsData = [
     {'setNumber': 1, 'weight': '', 'reps': ''}
   ];
@@ -36,18 +33,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Map<String, dynamic>? deviceInfo;
   bool isLoading = true;
   bool isFeedbackVisible = false;
-  bool trainingCompletedToday = false; // Zeigt an, ob heute schon getrackt wurde.
+  bool trainingCompletedToday = false;
 
   int? deviceId;
   int? userId;
   final ApiService apiService = ApiService();
   late String trainingDate;
 
-  // Aktiver Trainingsplan-Kontext
+  // Variablen für Trainingsplan und Übungsauswahl
   List<int>? activePlan;
   int? activePlanIndex;
-  // Lokale Variable für die Übungsauswahl
   String? selectedExercise;
+
+  bool _initialized = false;
+
+  // Dummy-Liste für Übungsauswahl im "multi"-Modus
+  final List<String> multiExerciseOptions = [
+    "Benchpress",
+    "Squat",
+    "Deadlift"
+  ];
 
   @override
   void initState() {
@@ -55,7 +60,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
     trainingDate = _formatLocalDate(DateTime.now());
     weightControllers.add(TextEditingController(text: setsData[0]['weight']));
     repsControllers.add(TextEditingController(text: setsData[0]['reps']));
-    _loadUserId().then((_) => _initializeData());
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_initialized) {
+      _init();
+      _initialized = true;
+    }
+  }
+
+  Future<void> _init() async {
+    await _loadUserId();
+    _initializeData();
   }
 
   @override
@@ -75,7 +93,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void _initializeData() {
     final args = ModalRoute.of(context)?.settings.arguments;
     if (args is Map) {
-      if (args.containsKey('activeTrainingPlan') && args.containsKey('currentIndex')) {
+      if (args.containsKey('secretCode') && args.containsKey('deviceId')) {
+        final secretCode = args['secretCode'];
+        final receivedDeviceId = args['deviceId'];
+        apiService.getDeviceBySecret(receivedDeviceId, secretCode).then((device) {
+          setState(() {
+            deviceId = device['id'];
+            deviceInfo = device;
+          });
+        }).catchError((error) {
+          debugPrint('Fehler beim Abrufen des Geräts mit secretCode: $error');
+        });
+      } else if (args.containsKey('activeTrainingPlan') && args.containsKey('currentIndex')) {
         activePlan = List<int>.from(args['activeTrainingPlan']);
         activePlanIndex = args['currentIndex'];
         deviceId = activePlan![activePlanIndex!];
@@ -91,26 +120,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (widget.exercise != null) {
       selectedExercise = widget.exercise;
     }
-    _fetchDeviceInfo();
     _fetchLastSession();
+    _fetchDeviceInfo();
   }
 
   String _formatLocalDate(DateTime date) {
-    final y = date.year.toString();
-    final m = date.month.toString().padLeft(2, '0');
-    final d = date.day.toString().padLeft(2, '0');
+    final germanDate = date.toUtc().add(const Duration(hours: 1));
+    final y = germanDate.year.toString();
+    final m = germanDate.month.toString().padLeft(2, '0');
+    final d = germanDate.day.toString().padLeft(2, '0');
     return "$y-$m-$d";
   }
 
   Future<void> _fetchDeviceInfo() async {
-    try {
-      final devices = await apiService.getDevices();
-      final found = devices.firstWhere((d) => d['id'] == deviceId, orElse: () => null);
-      setState(() {
-        deviceInfo = found;
-      });
-    } catch (error) {
-      debugPrint('Fehler beim Abrufen der Geräteinformationen: $error');
+    if (deviceId != null) {
+      try {
+        final devices = await apiService.getDevices();
+        final found = devices.firstWhere((d) => d['id'] == deviceId, orElse: () => null);
+        setState(() {
+          deviceInfo = found;
+        });
+      } catch (error) {
+        debugPrint('Fehler beim Abrufen der Geräteinformationen: $error');
+      }
     }
   }
 
@@ -122,7 +154,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       return;
     }
     try {
-      // Falls eine Übung gewählt wurde, rufe die Historie für diese Übung ab, sonst nach Gerät.
       final history = selectedExercise != null
           ? await apiService.getHistory(userId!, exercise: selectedExercise)
           : await apiService.getHistory(userId!, deviceId: deviceId!);
@@ -133,8 +164,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
         final formattedLatest = _formatLocalDate(DateTime.parse(latestDate));
         final today = _formatLocalDate(DateTime.now());
         setState(() {
-          lastSession = history.where((entry) =>
-              _formatLocalDate(DateTime.parse(entry['training_date'])) == formattedLatest).toList();
+          lastSession = history
+              .where((entry) =>
+                  _formatLocalDate(DateTime.parse(entry['training_date'])) == formattedLatest)
+              .toList();
           lastTrainingDate = formattedLatest;
           trainingCompletedToday = (today == formattedLatest);
         });
@@ -160,25 +193,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     });
   }
 
-  void _removeLastSet() {
-    if (setsData.length > 1) {
-      setState(() {
-        setsData.removeLast();
-        weightControllers.removeLast().dispose();
-        repsControllers.removeLast().dispose();
-        for (int i = 0; i < setsData.length; i++) {
-          setsData[i]['setNumber'] = i + 1;
-        }
-      });
-    } else {
-      setState(() {
-        setsData = [{'setNumber': 1, 'weight': '', 'reps': ''}];
-        weightControllers[0].text = '';
-        repsControllers[0].text = '';
-      });
-    }
-  }
-
   void _addSet() {
     final currentSet = setsData.last;
     final isCurrentSetValid = currentSet['weight'].toString().trim().isNotEmpty &&
@@ -195,16 +209,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Future<void> _finishSession() async {
-    // Wenn bereits heute ein Training für diese Übung getrackt wurde, blockiere den Abschluss.
     if (trainingCompletedToday) {
       _showAlert("Du warst hier heute schonmal");
       return;
     }
-    final exerciseName = selectedExercise ?? (deviceInfo != null ? deviceInfo!['name'] : "Gerät $deviceId");
-    final finalData = setsData.where((set) {
-      return set['weight'].toString().trim().isNotEmpty &&
-             set['reps'].toString().trim().isNotEmpty;
-    }).map((set) {
+    final exerciseName =
+        selectedExercise ?? (deviceInfo != null ? deviceInfo!['name'] : "Gerät $deviceId");
+    final finalData = setsData
+        .where((set) =>
+            set['weight'].toString().trim().isNotEmpty &&
+            set['reps'].toString().trim().isNotEmpty)
+        .map((set) {
       return {
         'exercise': exerciseName,
         'sets': set['setNumber'],
@@ -270,6 +285,45 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  /// Widget zur Auswahl im "multi"-Modus
+  Widget _buildMultiExerciseSelection() {
+    return Column(
+      children: [
+        Text(
+          "Bitte wähle eine Übung:",
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Theme.of(context).colorScheme.secondary,
+              ),
+        ),
+        const SizedBox(height: 16),
+        Wrap(
+          spacing: 16,
+          children: multiExerciseOptions.map((exerciseOption) {
+            return ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Theme.of(context).primaryColor,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              ),
+              onPressed: () {
+                setState(() {
+                  selectedExercise = exerciseOption;
+                  _fetchLastSession();
+                });
+              },
+              child: Text(
+                exerciseOption,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 16),
+              ),
+            );
+          }).toList(),
+        ),
+        const SizedBox(height: 24),
+      ],
+    );
+  }
+
   Widget _buildInputTable() {
     return Card(
       elevation: 6,
@@ -292,15 +346,36 @@ class _DashboardScreenState extends State<DashboardScreen> {
               children: [
                 Padding(
                   padding: const EdgeInsets.all(8.0),
-                  child: Text("Satz", textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.red)),
+                  child: Text(
+                    "Satz",
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: Theme.of(context).colorScheme.secondary,
+                        ),
+                  ),
                 ),
                 Padding(
                   padding: const EdgeInsets.all(8.0),
-                  child: Text("Kg", textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.red)),
+                  child: Text(
+                    "Kg",
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: Theme.of(context).colorScheme.secondary,
+                        ),
+                  ),
                 ),
                 Padding(
                   padding: const EdgeInsets.all(8.0),
-                  child: Text("Wdh", textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.red)),
+                  child: Text(
+                    "Wdh",
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: Theme.of(context).colorScheme.secondary,
+                        ),
+                  ),
                 ),
               ],
             ),
@@ -309,10 +384,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 children: [
                   Padding(
                     padding: const EdgeInsets.all(8.0),
-                    child: Text(setsData[index]['setNumber'].toString(), textAlign: TextAlign.center, style: const TextStyle(color: Colors.red)),
+                    child: Text(
+                      setsData[index]['setNumber'].toString(),
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: Theme.of(context).colorScheme.secondary,
+                          ),
+                    ),
                   ),
                   Padding(
-                    padding: const EdgeInsets.all(4.0),
+                    padding: const EdgeInsets.all(8.0),
                     child: TextField(
                       keyboardType: TextInputType.number,
                       decoration: const InputDecoration(
@@ -321,11 +402,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                       controller: weightControllers[index],
                       onChanged: (value) => _handleInputChange(index, 'weight', value),
-                      style: const TextStyle(color: Colors.red),
+                      style: Theme.of(context).textTheme.bodyMedium,
                     ),
                   ),
                   Padding(
-                    padding: const EdgeInsets.all(4.0),
+                    padding: const EdgeInsets.all(8.0),
                     child: TextField(
                       keyboardType: TextInputType.number,
                       decoration: const InputDecoration(
@@ -334,7 +415,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                       controller: repsControllers[index],
                       onChanged: (value) => _handleInputChange(index, 'reps', value),
-                      style: const TextStyle(color: Colors.red),
+                      style: Theme.of(context).textTheme.bodyMedium,
                     ),
                   ),
                 ],
@@ -363,23 +444,45 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 children: [
                   ElevatedButton(
                     onPressed: activePlanIndex! > 0 ? _goToPreviousExercise : null,
-                    child: const Text("Vorherige Übung", style: TextStyle(color: Colors.red)),
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.black),
+                    child: Text(
+                      "Vorherige Übung",
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Theme.of(context).primaryColor,
+                    ),
                   ),
                   ElevatedButton(
                     onPressed: _endPlan,
-                    child: const Text("Plan beenden", style: TextStyle(color: Colors.red)),
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                    child: Text(
+                      "Plan beenden",
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Theme.of(context).colorScheme.secondary,
+                    ),
                   ),
                   ElevatedButton(
                     onPressed: activePlanIndex! < activePlan!.length - 1 ? _goToNextExercise : null,
-                    child: const Text("Nächste Übung", style: TextStyle(color: Colors.red)),
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.black),
+                    child: Text(
+                      "Nächste Übung",
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Theme.of(context).primaryColor,
+                    ),
                   ),
                 ],
               ),
               const SizedBox(height: 12),
-              Text("Übung ${activePlanIndex! + 1} von ${activePlan!.length}", style: const TextStyle(fontSize: 16, color: Colors.red)),
+              Text(
+                "Übung ${activePlanIndex! + 1} von ${activePlan!.length}",
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(context).colorScheme.secondary,
+                    ),
+              ),
             ],
           ),
         ),
@@ -424,10 +527,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (deviceId == null) {
       return Scaffold(
         appBar: AppBar(
-          title: const Text("Dashboard", style: TextStyle(color: Colors.red)),
-          backgroundColor: Colors.black,
+          title: Text(
+            "Dashboard",
+            style: Theme.of(context).appBarTheme.titleTextStyle,
+          ),
+          backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
         ),
-        body: const Center(child: Text("Keine gültige Geräte-ID gefunden.", style: TextStyle(color: Colors.red))),
+        body: Center(
+          child: Text(
+            "Keine gültige Geräte-ID gefunden.",
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+        ),
       );
     }
 
@@ -444,9 +555,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
           selectedExercise != null
               ? "${selectedExercise!} – ${deviceInfo != null ? deviceInfo!['name'] : "Gerät $deviceId"}"
               : deviceInfo != null ? deviceInfo!['name'] : "Gerät $deviceId",
-          style: const TextStyle(color: Colors.red),
+          style: Theme.of(context).appBarTheme.titleTextStyle,
         ),
-        backgroundColor: Colors.black,
+        backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
       ),
       body: Container(
         decoration: const BoxDecoration(
@@ -463,35 +574,43 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Text("Datum: $trainingDate", style: const TextStyle(fontSize: 16, color: Colors.red)),
+                    Text("Datum: $trainingDate",
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 16)),
                     const SizedBox(height: 16),
-                    _buildInputTable(),
+                    if (deviceInfo != null &&
+                        deviceInfo!['exercise_mode'].toString().toLowerCase() == 'multi' &&
+                        selectedExercise == null)
+                      _buildMultiExerciseSelection()
+                    else
+                      _buildInputTable(),
                     const SizedBox(height: 16),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: [
                         ElevatedButton(
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.black,
+                            backgroundColor: Theme.of(context).primaryColor,
                             padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
                           ),
                           onPressed: isCurrentSetValid ? _addSet : null,
-                          child: const Text("Nächster Satz", style: TextStyle(color: Colors.red, fontSize: 16)),
+                          child: Text("Nächster Satz",
+                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 16)),
                         ),
                         ElevatedButton(
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.black,
+                            backgroundColor: Theme.of(context).primaryColor,
                             padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
                           ),
                           onPressed: isFinishDisabled ? null : _finishSession,
-                          child: const Text("Fertig", style: TextStyle(color: Colors.red, fontSize: 16)),
+                          child: Text("Fertig",
+                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 16)),
                         ),
                       ],
                     ),
                     const SizedBox(height: 16),
                     ElevatedButton(
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.black,
+                        backgroundColor: Theme.of(context).primaryColor,
                         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
                       ),
                       onPressed: () {
@@ -500,14 +619,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           if (selectedExercise != null) 'exercise': selectedExercise,
                         });
                       },
-                      child: const Text("Zur Trainingshistorie", style: TextStyle(color: Colors.red, fontSize: 16)),
+                      child: Text("Zur Trainingshistorie",
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 16)),
                     ),
                     const SizedBox(height: 24),
-                    Text("Letzte Trainingseinheit", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.red)),
+                    Text("Letzte Trainingseinheit",
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: Theme.of(context).colorScheme.secondary,
+                            )),
                     const SizedBox(height: 8),
                     lastTrainingDate.isNotEmpty
-                        ? Text("Datum: ${_formatLocalDate(DateTime.parse(lastTrainingDate))}", style: const TextStyle(fontSize: 16, color: Colors.red))
-                        : const Text("Keine Daten vorhanden.", style: TextStyle(color: Colors.red)),
+                        ? Text("Datum: ${_formatLocalDate(DateTime.parse(lastTrainingDate))}",
+                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 16))
+                        : Text("Keine Daten vorhanden.", style: Theme.of(context).textTheme.bodyMedium),
                     const SizedBox(height: 8),
                     if (lastSession.isNotEmpty)
                       Card(
@@ -528,33 +654,69 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 children: [
                                   Padding(
                                     padding: const EdgeInsets.all(8.0),
-                                    child: Text("Satz", textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.red)),
+                                    child: Text("Satz",
+                                        textAlign: TextAlign.center,
+                                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                              fontWeight: FontWeight.bold,
+                                              color: Theme.of(context).colorScheme.secondary,
+                                            )),
                                   ),
                                   Padding(
                                     padding: const EdgeInsets.all(8.0),
-                                    child: Text("Kg", textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.red)),
+                                    child: Text("Kg",
+                                        textAlign: TextAlign.center,
+                                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                              fontWeight: FontWeight.bold,
+                                              color: Theme.of(context).colorScheme.secondary,
+                                            )),
                                   ),
                                   Padding(
                                     padding: const EdgeInsets.all(8.0),
-                                    child: Text("Wdh", textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.red)),
+                                    child: Text("Wdh",
+                                        textAlign: TextAlign.center,
+                                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                              fontWeight: FontWeight.bold,
+                                              color: Theme.of(context).colorScheme.secondary,
+                                            )),
                                   ),
                                 ],
                               ),
-                              ...List<TableRow>.generate(lastSession.length, (index) {
-                                final entry = lastSession[index];
+                              ...List<TableRow>.generate(setsData.length, (index) {
                                 return TableRow(
                                   children: [
                                     Padding(
                                       padding: const EdgeInsets.all(8.0),
-                                      child: Text(entry['sets'].toString(), textAlign: TextAlign.center, style: const TextStyle(color: Colors.red)),
+                                      child: Text(setsData[index]['setNumber'].toString(),
+                                          textAlign: TextAlign.center,
+                                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                                color: Theme.of(context).colorScheme.secondary,
+                                              )),
                                     ),
                                     Padding(
                                       padding: const EdgeInsets.all(8.0),
-                                      child: Text(entry['weight'].toString(), textAlign: TextAlign.center, style: const TextStyle(color: Colors.red)),
+                                      child: TextField(
+                                        keyboardType: TextInputType.number,
+                                        decoration: const InputDecoration(
+                                          border: OutlineInputBorder(),
+                                          isDense: true,
+                                        ),
+                                        controller: weightControllers[index],
+                                        onChanged: (value) => _handleInputChange(index, 'weight', value),
+                                        style: Theme.of(context).textTheme.bodyMedium,
+                                      ),
                                     ),
                                     Padding(
                                       padding: const EdgeInsets.all(8.0),
-                                      child: Text(entry['reps'].toString(), textAlign: TextAlign.center, style: const TextStyle(color: Colors.red)),
+                                      child: TextField(
+                                        keyboardType: TextInputType.number,
+                                        decoration: const InputDecoration(
+                                          border: OutlineInputBorder(),
+                                          isDense: true,
+                                        ),
+                                        controller: repsControllers[index],
+                                        onChanged: (value) => _handleInputChange(index, 'reps', value),
+                                        style: Theme.of(context).textTheme.bodyMedium,
+                                      ),
                                     ),
                                   ],
                                 );
@@ -566,7 +728,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     const SizedBox(height: 16),
                     ElevatedButton(
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.black,
+                        backgroundColor: Theme.of(context).primaryColor,
                         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
                       ),
                       onPressed: () {
@@ -576,7 +738,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       },
                       child: Text(
                         isFeedbackVisible ? "Feedback-Formular schließen" : "Feedback geben",
-                        style: const TextStyle(color: Colors.red, fontSize: 16),
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 16),
                       ),
                     ),
                     if (isFeedbackVisible)

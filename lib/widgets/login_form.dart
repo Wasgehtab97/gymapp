@@ -1,4 +1,3 @@
-// lib/widgets/login_form.dart
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -61,16 +60,23 @@ class _LoginFormState extends State<LoginForm> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Column(
       children: [
-        const Text(
+        Text(
           'Login',
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
         ),
         if (_error.isNotEmpty)
-          Text(_error, style: const TextStyle(color: Colors.red)),
+          Text(
+            _error,
+            style: theme.textTheme.bodyMedium?.copyWith(color: Colors.red),
+          ),
         if (_success.isNotEmpty)
-          Text(_success, style: const TextStyle(color: Colors.green)),
+          Text(
+            _success,
+            style: theme.textTheme.bodyMedium?.copyWith(color: Colors.green),
+          ),
         Form(
           key: _formKey,
           child: Column(
@@ -102,7 +108,10 @@ class _LoginFormState extends State<LoginForm> {
               const SizedBox(height: 16),
               ElevatedButton(
                 onPressed: _handleLogin,
-                child: const Text('Login'),
+                child: Text(
+                  'Login',
+                  style: theme.textTheme.bodyMedium,
+                ),
               ),
             ],
           ),

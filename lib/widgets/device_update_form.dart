@@ -1,4 +1,3 @@
-// lib/widgets/device_update_form.dart
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -78,14 +77,15 @@ class _DeviceUpdateFormState extends State<DeviceUpdateForm> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Form(
       key: _formKey,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Neuer Gerätename:',
-            style: TextStyle(fontWeight: FontWeight.bold),
+            style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
           TextFormField(
@@ -104,12 +104,18 @@ class _DeviceUpdateFormState extends State<DeviceUpdateForm> {
           const SizedBox(height: 12),
           ElevatedButton(
             onPressed: _handleUpdate,
-            child: const Text('Aktualisieren'),
+            child: Text(
+              'Aktualisieren',
+              style: theme.textTheme.labelLarge,
+            ),
           ),
           if (_message.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 8.0),
-              child: Text(_message),
+              child: Text(
+                _message,
+                style: theme.textTheme.bodyMedium,
+              ),
             ),
         ],
       ),

@@ -4,40 +4,22 @@ import 'package:http/http.dart' as http;
 import '../config.dart';
 
 class FeedbackOverview extends StatefulWidget {
-  const FeedbackOverview({Key? key}) : super(key: key);
+  final int deviceId;
+  const FeedbackOverview({Key? key, required this.deviceId}) : super(key: key);
 
   @override
-  _FeedbackOverviewState createState() => _FeedbackOverviewState();
+  FeedbackOverviewState createState() => FeedbackOverviewState();
 }
 
-class _FeedbackOverviewState extends State<FeedbackOverview> {
+class FeedbackOverviewState extends State<FeedbackOverview> {
   List<dynamic> feedbacks = [];
-  List<dynamic> devices = [];
-  String deviceFilter = '';
-  String statusFilter = '';
   bool loading = false;
+  String statusFilter = '';
 
   @override
   void initState() {
     super.initState();
-    _fetchDevices();
     _fetchFeedbacks();
-  }
-
-  Future<void> _fetchDevices() async {
-    try {
-      final response = await http.get(Uri.parse('$API_URL/api/devices'));
-      final result = jsonDecode(response.body);
-      if (response.statusCode == 200 && result['data'] != null) {
-        setState(() {
-          devices = result['data'];
-        });
-      } else {
-        debugPrint(result['error']?.toString());
-      }
-    } catch (error) {
-      debugPrint('Fehler beim Abrufen der Geräte: $error');
-    }
   }
 
   Future<void> _fetchFeedbacks() async {
@@ -45,10 +27,7 @@ class _FeedbackOverviewState extends State<FeedbackOverview> {
       loading = true;
     });
     try {
-      List<String> queryParams = [];
-      if (deviceFilter.isNotEmpty) {
-        queryParams.add('deviceId=${Uri.encodeComponent(deviceFilter)}');
-      }
+      List<String> queryParams = ['deviceId=${widget.deviceId}'];
       if (statusFilter.isNotEmpty) {
         queryParams.add('status=${Uri.encodeComponent(statusFilter)}');
       }
@@ -98,51 +77,63 @@ class _FeedbackOverviewState extends State<FeedbackOverview> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final textTheme = theme.textTheme;
     return Container(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Feedback Übersicht',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.red),
+            style: textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.bold,
+              color: theme.colorScheme.secondary,
+            ),
           ),
           const SizedBox(height: 16),
-          // Filter-UI: Dropdowns für Gerät und Status
           Row(
             children: [
-              const Text("Gerät auswählen: ", style: TextStyle(color: Colors.red)),
-              const SizedBox(width: 8),
-              DropdownButton<String>(
-                value: deviceFilter.isNotEmpty ? deviceFilter : null,
-                hint: const Text("Alle Geräte", style: TextStyle(color: Colors.red)),
-                items: [
-                  const DropdownMenuItem(value: '', child: Text("Alle Geräte", style: TextStyle(color: Colors.red))),
-                  ...devices.map<DropdownMenuItem<String>>((device) {
-                    return DropdownMenuItem<String>(
-                      value: device['id'].toString(),
-                      child: Text(device['name'].toString(), style: const TextStyle(color: Colors.red)),
-                    );
-                  }).toList(),
-                ],
-                onChanged: (value) {
-                  setState(() {
-                    deviceFilter = value ?? '';
-                  });
-                  _fetchFeedbacks();
-                },
+              Text(
+                "Status: ",
+                style: textTheme.bodyMedium?.copyWith(color: theme.colorScheme.secondary),
               ),
-              const SizedBox(width: 16),
-              const Text("Status: ", style: TextStyle(color: Colors.red)),
               const SizedBox(width: 8),
               DropdownButton<String>(
                 value: statusFilter.isNotEmpty ? statusFilter : null,
-                hint: const Text("Alle", style: TextStyle(color: Colors.red)),
-                items: const [
-                  DropdownMenuItem(value: '', child: Text("Alle", style: TextStyle(color: Colors.red))),
-                  DropdownMenuItem(value: 'neu', child: Text("Neu", style: TextStyle(color: Colors.red))),
-                  DropdownMenuItem(value: 'in Bearbeitung', child: Text("In Bearbeitung", style: TextStyle(color: Colors.red))),
-                  DropdownMenuItem(value: 'erledigt', child: Text("Erledigt", style: TextStyle(color: Colors.red))),
+                hint: Text(
+                  "Alle",
+                  style: textTheme.bodyMedium?.copyWith(color: theme.colorScheme.secondary),
+                ),
+                items: [
+                  DropdownMenuItem(
+                    value: '',
+                    child: Text(
+                      "Alle",
+                      style: textTheme.bodyMedium?.copyWith(color: theme.colorScheme.secondary),
+                    ),
+                  ),
+                  DropdownMenuItem(
+                    value: 'neu',
+                    child: Text(
+                      "Neu",
+                      style: textTheme.bodyMedium?.copyWith(color: theme.colorScheme.secondary),
+                    ),
+                  ),
+                  DropdownMenuItem(
+                    value: 'in Bearbeitung',
+                    child: Text(
+                      "In Bearbeitung",
+                      style: textTheme.bodyMedium?.copyWith(color: theme.colorScheme.secondary),
+                    ),
+                  ),
+                  DropdownMenuItem(
+                    value: 'erledigt',
+                    child: Text(
+                      "Erledigt",
+                      style: textTheme.bodyMedium?.copyWith(color: theme.colorScheme.secondary),
+                    ),
+                  ),
                 ],
                 onChanged: (value) {
                   setState(() {
@@ -151,57 +142,48 @@ class _FeedbackOverviewState extends State<FeedbackOverview> {
                   _fetchFeedbacks();
                 },
               ),
-              const SizedBox(width: 16),
-              ElevatedButton(
-                onPressed: _fetchFeedbacks,
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.black),
-                child: const Text("Filter anwenden", style: TextStyle(color: Colors.red)),
-              ),
             ],
           ),
           const SizedBox(height: 16),
-          // Anzeige der Feedbacks in einer DataTable
           loading
               ? const Center(child: CircularProgressIndicator())
-              : SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: DataTable(
-                    columns: const [
-                      DataColumn(label: Text('ID', style: TextStyle(color: Colors.red))),
-                      DataColumn(label: Text('Gerät', style: TextStyle(color: Colors.red))),
-                      DataColumn(label: Text('Feedback', style: TextStyle(color: Colors.red))),
-                      DataColumn(label: Text('Datum', style: TextStyle(color: Colors.red))),
-                      DataColumn(label: Text('Status', style: TextStyle(color: Colors.red))),
-                      DataColumn(label: Text('Aktionen', style: TextStyle(color: Colors.red))),
-                    ],
-                    rows: feedbacks.map<DataRow>((fb) {
-                      final deviceId = fb['device_id'];
-                      final device = devices.firstWhere((d) => d['id'] == deviceId, orElse: () => null);
-                      final deviceName = device != null ? device['name'].toString() : 'Gerät $deviceId';
-                      final createdAt = DateTime.tryParse(fb['created_at']?.toString() ?? '')?.toLocal() ?? DateTime.now();
-                      final formattedDate =
-                          "${createdAt.day.toString().padLeft(2, '0')}.${createdAt.month.toString().padLeft(2, '0')}.${createdAt.year}";
-                      return DataRow(
-                        cells: [
-                          DataCell(Text(fb['id'].toString(), style: const TextStyle(color: Colors.red))),
-                          DataCell(Text(deviceName, style: const TextStyle(color: Colors.red))),
-                          DataCell(Text(fb['feedback_text'].toString(), style: const TextStyle(color: Colors.red))),
-                          DataCell(Text(formattedDate, style: const TextStyle(color: Colors.red))),
-                          DataCell(Text(fb['status'].toString(), style: const TextStyle(color: Colors.red))),
-                          DataCell(
-                            fb['status'] != 'erledigt'
-                                ? ElevatedButton(
+              : feedbacks.isEmpty
+                  ? Center(
+                      child: Text(
+                        "Kein Feedback vorhanden.",
+                        style: textTheme.bodyMedium?.copyWith(color: theme.colorScheme.secondary),
+                      ),
+                    )
+                  : ListView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: feedbacks.length,
+                      itemBuilder: (context, index) {
+                        final fb = feedbacks[index];
+                        final createdAt = DateTime.tryParse(fb['created_at']?.toString() ?? '')?.toLocal() ?? DateTime.now();
+                        final formattedDate =
+                            "${createdAt.day.toString().padLeft(2, '0')}.${createdAt.month.toString().padLeft(2, '0')}.${createdAt.year}";
+                        return Card(
+                          margin: const EdgeInsets.symmetric(vertical: 4),
+                          child: ListTile(
+                            title: Text(
+                              fb['feedback_text'] ?? '',
+                              style: textTheme.bodyMedium?.copyWith(color: theme.colorScheme.secondary),
+                            ),
+                            subtitle: Text(
+                              'Status: ${fb['status']} • $formattedDate',
+                              style: textTheme.bodySmall?.copyWith(color: theme.colorScheme.secondary),
+                            ),
+                            trailing: fb['status'] != 'erledigt'
+                                ? IconButton(
+                                    icon: Icon(Icons.check, color: theme.colorScheme.secondary),
                                     onPressed: () => _updateFeedbackStatus(fb['id'], 'erledigt'),
-                                    style: ElevatedButton.styleFrom(backgroundColor: Colors.black),
-                                    child: const Text("Als erledigt markieren", style: TextStyle(color: Colors.red)),
                                   )
-                                : const SizedBox.shrink(),
+                                : null,
                           ),
-                        ],
-                      );
-                    }).toList(),
-                  ),
-                ),
+                        );
+                      },
+                    ),
         ],
       ),
     );

@@ -1,6 +1,5 @@
-import 'dart:math';
 import 'package:flutter/material.dart';
-import 'package:fl_chart/fl_chart.dart';
+import 'package:intl/intl.dart';
 import '../services/api_services.dart';
 import '../widgets/feedback_overview.dart';
 
@@ -8,25 +7,39 @@ class ReportDashboardScreen extends StatefulWidget {
   const ReportDashboardScreen({super.key});
 
   @override
-  _ReportDashboardScreenState createState() => _ReportDashboardScreenState();
+  ReportDashboardScreenState createState() => ReportDashboardScreenState();
 }
 
-class _ReportDashboardScreenState extends State<ReportDashboardScreen> {
+class ReportDashboardScreenState extends State<ReportDashboardScreen> {
   final ApiService apiService = ApiService();
 
   List<dynamic> reportData = [];
   List<dynamic> devices = [];
-  String startDate = '';
-  String endDate = '';
-  String selectedDevice = '';
-  bool showFeedbackOverview = false;
+  // selectedDevice: leer bedeutet "Alle"
+  String selectedDevice = "";
   bool isLoading = false;
   final int lowUsageThreshold = 3;
+
+  // Steuerung der Sortierreihenfolge: true = absteigend, false = aufsteigend.
+  bool sortDescending = true;
+
+  // Speichert den aktuell ausgewählten Zeitraum als String (z. B. "2023-01-01 bis 2023-01-31")
+  String selectedDateRange = "Zeitraum auswählen";
+
+  // Map zum Speichern des Feedbackstatus (Farbe) für jedes Gerät (device_id als Key).
+  Map<String, Color> deviceFeedbackColors = {};
+
+  DateTime? _rangeStart;
+  DateTime? _rangeEnd;
 
   @override
   void initState() {
     super.initState();
-    _fetchDevices();
+    _fetchDevices().then((_) {
+      for (var device in devices) {
+        _fetchFeedbackStatus(device['id'].toString());
+      }
+    });
     _fetchReportData();
   }
 
@@ -47,8 +60,9 @@ class _ReportDashboardScreenState extends State<ReportDashboardScreen> {
     });
     try {
       final data = await apiService.getReportingData(
-        startDate: startDate.isNotEmpty ? startDate : null,
-        endDate: endDate.isNotEmpty ? endDate : null,
+        startDate: _rangeStart != null ? DateFormat('yyyy-MM-dd').format(_rangeStart!) : null,
+        endDate: _rangeEnd != null ? DateFormat('yyyy-MM-dd').format(_rangeEnd!) : null,
+        // Da selectedDevice nie null ist, prüfen wir nur auf isNotEmpty.
         deviceId: selectedDevice.isNotEmpty ? selectedDevice : null,
       );
       setState(() {
@@ -63,43 +77,120 @@ class _ReportDashboardScreenState extends State<ReportDashboardScreen> {
     }
   }
 
-  BarChartGroupData _makeGroupData(int x, double y) {
-    return BarChartGroupData(
-      x: x,
-      barRods: [
-        BarChartRodData(
-          toY: y,
-          color: Colors.red,
-          width: 16,
-        ),
-      ],
+  /// Öffnet den DateRangePicker und speichert den ausgewählten Zeitraum.
+  Future<void> _selectDateRange() async {
+    final DateTime now = DateTime.now();
+    final DateTimeRange? picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(now.year - 5),
+      lastDate: DateTime(now.year + 1),
+      initialDateRange: (_rangeStart != null && _rangeEnd != null)
+          ? DateTimeRange(start: _rangeStart!, end: _rangeEnd!)
+          : null,
+      helpText: 'Zeitraum auswählen',
+      builder: (context, child) {
+        return Theme(
+          data: ThemeData.dark().copyWith(
+            colorScheme: const ColorScheme.dark(
+              primary: Colors.red,
+              onPrimary: Colors.white,
+              surface: Colors.black,
+              onSurface: Colors.red,
+            ),
+            dialogTheme: DialogTheme(
+              backgroundColor: Colors.grey,
+            ),
+          ),
+          // Da wir sicher sind, dass child niemals null ist, casten wir ihn direkt.
+          child: child as Widget,
+        );
+      },
     );
-  }
-
-  List<BarChartGroupData> _buildBarGroups() {
-    List<BarChartGroupData> groups = [];
-    for (int i = 0; i < reportData.length; i++) {
-      double sessionCount =
-          double.tryParse(reportData[i]['session_count'].toString()) ?? 0.0;
-      groups.add(_makeGroupData(i, sessionCount));
+    if (picked != null) {
+      setState(() {
+        _rangeStart = picked.start;
+        _rangeEnd = picked.end;
+        selectedDateRange =
+            "${DateFormat('yyyy-MM-dd').format(picked.start)} bis ${DateFormat('yyyy-MM-dd').format(picked.end)}";
+      });
+      _fetchReportData();
     }
-    return groups;
   }
 
-  List<String> _getChartLabels() {
-    return reportData.map((item) {
-      final devId = item['device_id'];
-      final found = devices.firstWhere((d) => d['id'] == devId, orElse: () => null);
-      return found != null ? found['name'].toString() : 'Gerät $devId';
+  /// Ruft den Feedbackstatus für ein bestimmtes Gerät ab.
+  Future<void> _fetchFeedbackStatus(String deviceId) async {
+    try {
+      final response =
+          await apiService.getDataFromUrl('/api/feedback?deviceId=$deviceId');
+      if (response != null && response['data'] != null) {
+        List feedbacks = response['data'];
+        Color color;
+        if (feedbacks.isEmpty) {
+          color = Colors.yellow;
+        } else if (feedbacks.any((fb) => fb['status'] == 'neu')) {
+          color = Colors.red;
+        } else {
+          color = Colors.green;
+        }
+        setState(() {
+          deviceFeedbackColors[deviceId] = color;
+        });
+      } else {
+        setState(() {
+          deviceFeedbackColors[deviceId] = Colors.yellow;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        deviceFeedbackColors[deviceId] = Colors.yellow;
+      });
+      debugPrint('Fehler beim Abrufen des Feedbackstatus für Gerät $deviceId: $e');
+    }
+  }
+
+  /// Kombiniert die Reportdaten mit allen Geräten.
+  /// Für Geräte ohne Reportdaten wird der session_count auf 0 gesetzt.
+  List<Map<String, dynamic>> get combinedUsage {
+    return devices.map((device) {
+      final devId = device['id'].toString();
+      final reportEntry = reportData.firstWhere(
+        (entry) => entry['device_id'].toString() == devId,
+        orElse: () => <String, dynamic>{},
+      );
+      double count = reportEntry.isNotEmpty
+          ? double.tryParse(reportEntry['session_count'].toString()) ?? 0.0
+          : 0.0;
+      return {
+        'device_id': devId,
+        'name': device['name'],
+        'session_count': count,
+      };
     }).toList();
   }
 
-  // Nur eine Getter-Deklaration!
-  List<dynamic> get devicesWithLowUsage {
-    return reportData.where((item) {
-      int count = int.tryParse(item['session_count'].toString()) ?? 0;
-      return count < lowUsageThreshold;
-    }).toList();
+  /// Liefert die kombinierte Nutzungs-Liste sortiert nach session_count.
+  /// Wird ein Gerät ausgewählt (selectedDevice ist nicht leer), wird nur dieses angezeigt.
+  List<Map<String, dynamic>> get sortedCombinedUsage {
+    List<Map<String, dynamic>> usage = List.from(combinedUsage);
+    if (selectedDevice.isNotEmpty) {
+      usage = usage.where((item) => item['device_id'] == selectedDevice).toList();
+    }
+    usage.sort((a, b) {
+      double countA = a['session_count'];
+      double countB = b['session_count'];
+      return sortDescending ? countB.compareTo(countA) : countA.compareTo(countB);
+    });
+    return usage;
+  }
+
+  /// Bestimmt den maximalen session_count aus der sortierten Nutzungs-Liste.
+  double get _maxSessionCount {
+    double maxCount = 0.0;
+    for (var item in sortedCombinedUsage) {
+      double count = item['session_count'];
+      if (count > maxCount) maxCount = count;
+    }
+    return maxCount > 0 ? maxCount : 1;
   }
 
   void _handleFeedbackRequest(dynamic deviceId) {
@@ -108,18 +199,64 @@ class _ReportDashboardScreenState extends State<ReportDashboardScreen> {
     );
   }
 
+  /// Öffnet die Feedbackübersicht für das jeweilige Gerät.
+  void _showFeedbackOverview(String deviceId) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        // Achte darauf, dass FeedbackOverview als öffentliche Klasse definiert ist.
+        return Dialog(
+          child: FeedbackOverview(deviceId: int.tryParse(deviceId) ?? 0),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final chartLabels = _getChartLabels();
-    final barGroups = _buildBarGroups();
-
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'Reporting-Dashboard: Nutzungshäufigkeit',
-          style: TextStyle(color: Colors.red),
+        title: Text(
+          'Reporting',
+          style: Theme.of(context).appBarTheme.titleTextStyle,
         ),
-        backgroundColor: Colors.black,
+        backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
+        actions: [
+          PopupMenuButton<bool>(
+            icon: Icon(
+              Icons.filter_list,
+              color: Theme.of(context).iconTheme.color,
+              size: 20,
+            ),
+            onSelected: (value) {
+              setState(() {
+                sortDescending = value;
+              });
+            },
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                value: true,
+                child: Text(
+                  "Absteigend",
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodyMedium
+                      ?.copyWith(fontSize: 12),
+                ),
+              ),
+              PopupMenuItem(
+                value: false,
+                child: Text(
+                  "Aufsteigend",
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodyMedium
+                      ?.copyWith(fontSize: 12),
+                ),
+              ),
+            ],
+          )
+        ],
       ),
       body: Container(
         decoration: const BoxDecoration(
@@ -130,235 +267,166 @@ class _ReportDashboardScreenState extends State<ReportDashboardScreen> {
           ),
         ),
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16.0),
+          padding: const EdgeInsets.all(12.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Filter-UI: Flexible Datumseingabe
               Row(
                 children: [
-                  const Text("Startdatum: ", style: TextStyle(color: Colors.red)),
                   Expanded(
-                    child: TextField(
-                      style: const TextStyle(color: Colors.red),
-                      decoration: const InputDecoration(
-                        hintText: 'YYYY-MM-DD',
-                        hintStyle: TextStyle(color: Colors.redAccent),
-                        border: OutlineInputBorder(),
-                        isDense: true,
-                      ),
-                      onChanged: (value) {
-                        setState(() {
-                          startDate = value;
-                        });
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  const Text("Enddatum: ", style: TextStyle(color: Colors.red)),
-                  Expanded(
-                    child: TextField(
-                      style: const TextStyle(color: Colors.red),
-                      decoration: const InputDecoration(
-                        hintText: 'YYYY-MM-DD',
-                        hintStyle: TextStyle(color: Colors.redAccent),
-                        border: OutlineInputBorder(),
-                        isDense: true,
-                      ),
-                      onChanged: (value) {
-                        setState(() {
-                          endDate = value;
-                        });
-                      },
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              // Geräteauswahl Dropdown
-              Row(
-                children: [
-                  const Text("Gerät auswählen: ", style: TextStyle(color: Colors.red)),
-                  const SizedBox(width: 8),
-                  DropdownButton<String>(
-                    value: selectedDevice.isNotEmpty ? selectedDevice : null,
-                    hint: const Text("Alle Geräte", style: TextStyle(color: Colors.red)),
-                    items: [
-                      const DropdownMenuItem(
-                        value: '',
-                        child: Text("Alle Geräte", style: TextStyle(color: Colors.red)),
-                      ),
-                      ...devices.map((device) {
-                        return DropdownMenuItem<String>(
-                          value: device['id'].toString(),
-                          child: Text(device['name'].toString(), style: const TextStyle(color: Colors.red)),
-                        );
-                      }).toList(),
-                    ],
-                    onChanged: (value) {
-                      setState(() {
-                        selectedDevice = value ?? '';
-                      });
-                    },
-                  ),
-                  const SizedBox(width: 16),
-                  ElevatedButton(
-                    onPressed: _fetchReportData,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.black,
-                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                    ),
-                    child: const Text("Filter anwenden", style: TextStyle(color: Colors.red, fontSize: 16)),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              // Balkendiagramm: X-Achsen-Beschriftungen gedreht
-              isLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : AspectRatio(
-                      aspectRatio: 1.5,
-                      child: BarChart(
-                        BarChartData(
-                          barGroups: barGroups,
-                          titlesData: FlTitlesData(
-                            bottomTitles: AxisTitles(
-                              sideTitles: SideTitles(
-                                showTitles: true,
-                                interval: 1,
-                                getTitlesWidget: (double value, TitleMeta meta) {
-                                  int index = value.toInt();
-                                  if (index >= 0 && index < chartLabels.length) {
-                                    return SideTitleWidget(
-                                      meta: meta,
-                                      space: 4,
-                                      child: Transform.rotate(
-                                        angle: -pi / 4,
-                                        child: Text(
-                                          chartLabels[index],
-                                          style: const TextStyle(fontSize: 10, color: Colors.red),
-                                        ),
-                                      ),
-                                    );
-                                  }
-                                  return const SizedBox.shrink();
-                                },
+                    child: Row(
+                      children: [
+                        Text(
+                          "Auswahl:",
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodyMedium
+                              ?.copyWith(fontSize: 12),
+                        ),
+                        const SizedBox(width: 4),
+                        SizedBox(
+                          width: 100,
+                          child: DropdownButton<String>(
+                            isExpanded: true,
+                            value: selectedDevice.isNotEmpty ? selectedDevice : null,
+                            hint: Text(
+                              "Alle",
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodyMedium
+                                  ?.copyWith(fontSize: 12),
+                            ),
+                            items: [
+                              DropdownMenuItem(
+                                value: "",
+                                child: Text(
+                                  "Alle",
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodyMedium
+                                      ?.copyWith(fontSize: 12),
+                                ),
                               ),
-                            ),
-                            leftTitles: AxisTitles(
-                              sideTitles: SideTitles(
-                                showTitles: true,
-                                interval: 1,
-                                getTitlesWidget: (double value, TitleMeta meta) {
-                                  return Text(
-                                    value.toInt().toString(),
-                                    style: const TextStyle(fontSize: 10, color: Colors.red),
-                                  );
-                                },
-                              ),
-                            ),
-                            topTitles: AxisTitles(
-                              sideTitles: SideTitles(showTitles: false),
-                            ),
-                            rightTitles: AxisTitles(
-                              sideTitles: SideTitles(showTitles: false),
-                            ),
-                          ),
-                          borderData: FlBorderData(show: false),
-                          gridData: FlGridData(
-                            show: true,
-                            getDrawingHorizontalLine: (value) {
-                              return FlLine(
-                                color: Colors.red.withOpacity(0.3),
-                                strokeWidth: 1,
-                              );
+                              ...devices.map((device) {
+                                return DropdownMenuItem<String>(
+                                  value: device['id'].toString(),
+                                  child: Text(
+                                    device['name'].toString(),
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodyMedium
+                                        ?.copyWith(fontSize: 12),
+                                  ),
+                                );
+                              }),
+                            ],
+                            onChanged: (value) {
+                              setState(() {
+                                selectedDevice = value ?? "";
+                                _fetchReportData();
+                              });
                             },
                           ),
                         ),
-                      ),
+                      ],
                     ),
-              const SizedBox(height: 24),
-              // Detailübersicht als DataTable
-              const Text(
-                "Detailübersicht",
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.red),
-              ),
-              const SizedBox(height: 16),
-              DataTable(
-                columns: const [
-                  DataColumn(label: Text('Gerät', style: TextStyle(color: Colors.red))),
-                  DataColumn(label: Text('Nutzungshäufigkeit', style: TextStyle(color: Colors.red))),
+                  ),
+                  TextButton(
+                    onPressed: _selectDateRange,
+                    child: Text(
+                      selectedDateRange,
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodyMedium
+                          ?.copyWith(fontSize: 12),
+                    ),
+                  )
                 ],
-                rows: reportData.map<DataRow>((item) {
-                  final devId = item['device_id'];
-                  final found = devices.firstWhere((d) => d['id'] == devId, orElse: () => null);
-                  final deviceName = found != null ? found['name'].toString() : 'Gerät $devId';
-                  return DataRow(cells: [
-                    DataCell(Text(deviceName, style: const TextStyle(color: Colors.red))),
-                    DataCell(Text(item['session_count'].toString(), style: const TextStyle(color: Colors.red))),
-                  ]);
-                }).toList(),
               ),
-              const SizedBox(height: 24),
-              // Feedback-Anfragen bei niedriger Nutzung
-              if (devicesWithLowUsage.isNotEmpty)
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      "Feedback-Anfragen",
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.red),
-                    ),
-                    const SizedBox(height: 8),
-                    Column(
-                      children: devicesWithLowUsage.map((item) {
-                        final devId = item['device_id'];
-                        final found = devices.firstWhere((d) => d['id'] == devId, orElse: () => null);
-                        final deviceName = found != null ? found['name'].toString() : 'Gerät $devId';
+              const SizedBox(height: 8),
+              isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: sortedCombinedUsage.map((item) {
+                        double sessionCount = item['session_count'];
+                        String deviceName = item['name'];
+                        double percentage = sessionCount / _maxSessionCount;
+                        // Ersetze withOpacity durch withAlpha unter Verwendung der .a-Eigenschaft
+                        Color backgroundColor = Theme.of(context)
+                            .colorScheme
+                            .secondary
+                            .withAlpha((Theme.of(context).colorScheme.secondary.a * 0.3).toInt());
+                        Color starColor = deviceFeedbackColors[item['device_id']] ?? Colors.yellow;
                         return Padding(
-                          padding: const EdgeInsets.only(bottom: 8.0),
+                          padding: const EdgeInsets.symmetric(vertical: 4.0),
                           child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Expanded(
+                              SizedBox(
+                                width: 100,
                                 child: Text(
-                                  "$deviceName hat nur ${item['session_count']} Trainingseinheiten.",
-                                  style: const TextStyle(color: Colors.red),
+                                  deviceName,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodyMedium
+                                      ?.copyWith(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.bold),
                                 ),
                               ),
-                              ElevatedButton(
-                                onPressed: () => _handleFeedbackRequest(devId),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.black,
-                                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                              const SizedBox(width: 4),
+                              SizedBox(
+                                width: 30,
+                                child: Text(
+                                  sessionCount.toStringAsFixed(0),
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodyMedium
+                                      ?.copyWith(fontSize: 12),
                                 ),
-                                child: const Text("Feedback anfordern", style: TextStyle(color: Colors.red)),
+                              ),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                child: Container(
+                                  height: 16,
+                                  decoration: BoxDecoration(
+                                    color: backgroundColor,
+                                    borderRadius: BorderRadius.circular(3),
+                                  ),
+                                  child: FractionallySizedBox(
+                                    alignment: Alignment.centerLeft,
+                                    widthFactor: percentage > 1 ? 1 : percentage,
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        color: Theme.of(context).colorScheme.secondary,
+                                        borderRadius: BorderRadius.circular(3),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              IconButton(
+                                icon: Icon(
+                                  Icons.error_outline,
+                                  color: Theme.of(context).iconTheme.color,
+                                  size: 16,
+                                ),
+                                onPressed: () => _handleFeedbackRequest(item['device_id']),
+                              ),
+                              IconButton(
+                                icon: Icon(
+                                  Icons.star,
+                                  color: starColor,
+                                  size: 16,
+                                ),
+                                onPressed: () => _showFeedbackOverview(item['device_id']),
                               ),
                             ],
                           ),
                         );
                       }).toList(),
                     ),
-                  ],
-                ),
-              const SizedBox(height: 16),
-              // Feedback Übersicht ein-/ausblenden
-              ElevatedButton(
-                onPressed: () {
-                  setState(() {
-                    showFeedbackOverview = !showFeedbackOverview;
-                  });
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.black,
-                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                ),
-                child: Text(
-                  showFeedbackOverview ? "Feedback Übersicht ausblenden" : "Feedback Übersicht anzeigen",
-                  style: const TextStyle(color: Colors.red, fontSize: 16),
-                ),
-              ),
-              if (showFeedbackOverview) const FeedbackOverview(),
             ],
           ),
         ),

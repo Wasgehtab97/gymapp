@@ -1,4 +1,3 @@
-// lib/screens/trainingsplan.dart
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_services.dart';
@@ -95,19 +94,17 @@ class _TrainingsplanScreenState extends State<TrainingsplanScreen> {
       context: context,
       builder: (context) {
         return AlertDialog(
-          backgroundColor: Colors.grey[900],
-          title: const Text(
+          backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+          title: Text(
             "Neuen Trainingsplan erstellen",
-            style: TextStyle(color: Colors.red),
+            style: Theme.of(context).textTheme.titleLarge,
           ),
           content: TextField(
-            style: const TextStyle(color: Colors.red),
-            decoration: const InputDecoration(
+            style: Theme.of(context).textTheme.bodyMedium,
+            decoration: InputDecoration(
               labelText: "Name des Plans",
-              labelStyle: TextStyle(color: Colors.red),
-              enabledBorder: UnderlineInputBorder(
-                borderSide: BorderSide(color: Colors.red),
-              ),
+              labelStyle: Theme.of(context).inputDecorationTheme.labelStyle,
+              enabledBorder: Theme.of(context).inputDecorationTheme.enabledBorder,
             ),
             onChanged: (value) {
               planName = value;
@@ -116,11 +113,14 @@ class _TrainingsplanScreenState extends State<TrainingsplanScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text("Abbrechen", style: TextStyle(color: Colors.red)),
+              child: Text(
+                "Abbrechen",
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.black,
+                backgroundColor: Theme.of(context).primaryColor,
               ),
               onPressed: () {
                 if (planName.trim().isNotEmpty) {
@@ -128,7 +128,10 @@ class _TrainingsplanScreenState extends State<TrainingsplanScreen> {
                   Navigator.of(context).pop();
                 }
               },
-              child: const Text("Erstellen", style: TextStyle(color: Colors.red)),
+              child: Text(
+                "Erstellen",
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
             ),
           ],
         );
@@ -157,14 +160,17 @@ class _TrainingsplanScreenState extends State<TrainingsplanScreen> {
 
   Widget _buildPlanCard(Map<String, dynamic> plan) {
     return Card(
-      color: Colors.grey[850],
+      color: Theme.of(context).cardColor,
       margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: ListTile(
         title: Text(
           plan['name'],
-          style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+          style: Theme.of(context)
+              .textTheme
+              .titleLarge
+              ?.copyWith(fontWeight: FontWeight.bold),
         ),
         subtitle: Text(
           "Übungen: " +
@@ -173,10 +179,10 @@ class _TrainingsplanScreenState extends State<TrainingsplanScreen> {
                       .map((e) => e['device_name'])
                       .join(", ")
                   : "Keine Übungen"),
-          style: const TextStyle(color: Colors.red),
+          style: Theme.of(context).textTheme.bodyMedium,
         ),
         trailing: PopupMenuButton<String>(
-          icon: const Icon(Icons.more_vert, color: Colors.red),
+          icon: Icon(Icons.more_vert, color: Theme.of(context).iconTheme.color),
           onSelected: (value) {
             if (value == 'edit') {
               _editPlan(plan);
@@ -189,15 +195,15 @@ class _TrainingsplanScreenState extends State<TrainingsplanScreen> {
           itemBuilder: (context) => [
             PopupMenuItem(
               value: 'edit',
-              child: Text("Bearbeiten", style: const TextStyle(color: Colors.red)),
+              child: Text("Bearbeiten", style: Theme.of(context).textTheme.bodyMedium),
             ),
             PopupMenuItem(
               value: 'start',
-              child: Text("Plan starten", style: const TextStyle(color: Colors.red)),
+              child: Text("Plan starten", style: Theme.of(context).textTheme.bodyMedium),
             ),
             PopupMenuItem(
               value: 'delete',
-              child: Text("Löschen", style: const TextStyle(color: Colors.red)),
+              child: Text("Löschen", style: Theme.of(context).textTheme.bodyMedium),
             ),
           ],
         ),
@@ -207,8 +213,11 @@ class _TrainingsplanScreenState extends State<TrainingsplanScreen> {
 
   Widget _buildPlanList() {
     if (trainingPlans.isEmpty) {
-      return const Center(
-        child: Text("Keine Trainingspläne vorhanden.", style: TextStyle(color: Colors.red)),
+      return Center(
+        child: Text(
+          "Keine Trainingspläne vorhanden.",
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
       );
     }
     return ListView.builder(
@@ -224,11 +233,11 @@ class _TrainingsplanScreenState extends State<TrainingsplanScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Trainingsplan', style: TextStyle(color: Colors.red)),
-        backgroundColor: Colors.black,
+        title: Text('Trainingsplan', style: Theme.of(context).appBarTheme.titleTextStyle),
         centerTitle: true,
       ),
       body: Container(
+        // Hier wird der Gradient direkt definiert – alternativ zentral definierbar
         decoration: const BoxDecoration(
           gradient: LinearGradient(
             colors: [Color(0xFF0D0D0D), Color(0xFF1A1A1A)],
@@ -241,7 +250,7 @@ class _TrainingsplanScreenState extends State<TrainingsplanScreen> {
             : _buildPlanList(),
       ),
       floatingActionButton: FloatingActionButton(
-        backgroundColor: Colors.red,
+        backgroundColor: Theme.of(context).colorScheme.secondary,
         onPressed: _showCreatePlanDialog,
         child: const Icon(Icons.add, color: Colors.white),
       ),
@@ -325,8 +334,10 @@ class _EditTrainingPlanScreenState extends State<EditTrainingPlanScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Trainingsplan bearbeiten", style: TextStyle(color: Colors.red)),
-        backgroundColor: Colors.black,
+        title: Text(
+          "Trainingsplan bearbeiten",
+          style: Theme.of(context).appBarTheme.titleTextStyle,
+        ),
       ),
       body: Container(
         decoration: const BoxDecoration(
@@ -344,16 +355,25 @@ class _EditTrainingPlanScreenState extends State<EditTrainingPlanScreen> {
                     padding: const EdgeInsets.all(16.0),
                     child: Row(
                       children: [
-                        const Text("Übung hinzufügen: ", style: TextStyle(color: Colors.red)),
+                        Text(
+                          "Übung hinzufügen: ",
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: DropdownButton<dynamic>(
                             isExpanded: true,
-                            hint: const Text("Wähle ein Gerät", style: TextStyle(color: Colors.red)),
+                            hint: Text(
+                              "Wähle ein Gerät",
+                              style: Theme.of(context).textTheme.bodyMedium,
+                            ),
                             items: availableDevices.map((device) {
                               return DropdownMenuItem<dynamic>(
                                 value: device,
-                                child: Text(device['name'], style: const TextStyle(color: Colors.red)),
+                                child: Text(
+                                  device['name'],
+                                  style: Theme.of(context).textTheme.bodyMedium,
+                                ),
                               );
                             }).toList(),
                             onChanged: (device) {
@@ -372,8 +392,11 @@ class _EditTrainingPlanScreenState extends State<EditTrainingPlanScreen> {
                         final exercise = entry.value;
                         return ListTile(
                           key: ValueKey('${exercise['device_id']}_$index'),
-                          title: Text(exercise['device_name'], style: const TextStyle(color: Colors.red)),
-                          trailing: const Icon(Icons.drag_handle, color: Colors.red),
+                          title: Text(
+                            exercise['device_name'],
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          ),
+                          trailing: Icon(Icons.drag_handle, color: Theme.of(context).iconTheme.color),
                         );
                       }).toList(),
                     ),
@@ -382,15 +405,15 @@ class _EditTrainingPlanScreenState extends State<EditTrainingPlanScreen> {
                     padding: const EdgeInsets.all(16.0),
                     child: ElevatedButton(
                       onPressed: _savePlanChanges,
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.black),
-                      child: const Text("Änderungen speichern", style: TextStyle(color: Colors.red)),
+                      style: ElevatedButton.styleFrom(backgroundColor: Theme.of(context).primaryColor),
+                      child: Text("Änderungen speichern", style: Theme.of(context).textTheme.bodyMedium),
                     ),
                   )
                 ],
               ),
       ),
       floatingActionButton: FloatingActionButton(
-        backgroundColor: Colors.red,
+        backgroundColor: Theme.of(context).colorScheme.secondary,
         onPressed: () => Navigator.pop(context),
         child: const Icon(Icons.close, color: Colors.white),
       ),

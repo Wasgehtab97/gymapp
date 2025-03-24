@@ -32,7 +32,7 @@ class _FeedbackFormState extends State<FeedbackForm> {
 
     final prefs = await SharedPreferences.getInstance();
     final userId = prefs.getInt('userId');
-    final token = prefs.getString('token'); // Token abrufen
+    final token = prefs.getString('token');
     if (userId == null || token == null) {
       setState(() {
         _error = 'Benutzer nicht authentifiziert.';
@@ -45,7 +45,7 @@ class _FeedbackFormState extends State<FeedbackForm> {
         Uri.parse('$API_URL/api/feedback'),
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token', // Token im Header mitschicken
+          'Authorization': 'Bearer $token',
         },
         body: jsonEncode({
           'userId': userId,
@@ -89,9 +89,10 @@ class _FeedbackFormState extends State<FeedbackForm> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Container(
       decoration: BoxDecoration(
-        border: Border.all(color: Colors.grey.shade400),
+        border: Border.all(color: theme.dividerColor),
       ),
       padding: const EdgeInsets.all(16),
       margin: const EdgeInsets.only(top: 16),
@@ -100,16 +101,20 @@ class _FeedbackFormState extends State<FeedbackForm> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'Feedback geben',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.red),
+              style: theme.textTheme.titleLarge?.copyWith(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: theme.colorScheme.secondary,
+              ),
             ),
             if (_error.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: 8.0),
                 child: Text(
                   _error,
-                  style: const TextStyle(color: Colors.red),
+                  style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.error),
                 ),
               ),
             if (_success.isNotEmpty)
@@ -117,16 +122,16 @@ class _FeedbackFormState extends State<FeedbackForm> {
                 padding: const EdgeInsets.only(top: 8.0),
                 child: Text(
                   _success,
-                  style: const TextStyle(color: Colors.green),
+                  style: theme.textTheme.bodyMedium?.copyWith(color: Colors.green),
                 ),
               ),
             const SizedBox(height: 8),
             TextFormField(
               controller: _feedbackController,
-              decoration: const InputDecoration(
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                border: const OutlineInputBorder(),
                 hintText: 'Bitte geben Sie Ihr Feedback ein...',
-                hintStyle: TextStyle(color: Colors.redAccent),
+                hintStyle: theme.inputDecorationTheme.hintStyle,
               ),
               maxLines: 4,
               validator: (value) {
@@ -141,15 +146,21 @@ class _FeedbackFormState extends State<FeedbackForm> {
               children: [
                 ElevatedButton(
                   onPressed: _handleSubmit,
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.black),
-                  child: const Text('Absenden', style: TextStyle(color: Colors.red)),
+                  style: ElevatedButton.styleFrom(backgroundColor: theme.primaryColor),
+                  child: Text(
+                    'Absenden',
+                    style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.secondary),
+                  ),
                 ),
                 if (widget.onClose != null) const SizedBox(width: 8),
                 if (widget.onClose != null)
                   ElevatedButton(
                     onPressed: widget.onClose,
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.black),
-                    child: const Text('Abbrechen', style: TextStyle(color: Colors.red)),
+                    style: ElevatedButton.styleFrom(backgroundColor: theme.primaryColor),
+                    child: Text(
+                      'Abbrechen',
+                      style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.secondary),
+                    ),
                   ),
               ],
             ),
