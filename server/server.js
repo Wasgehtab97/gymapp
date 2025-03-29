@@ -14,7 +14,8 @@ const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname, '../frontend/build')));
+// Falls du derzeit keinen Web-Build hast, kommentiere diese Zeile aus:
+// app.use(express.static(path.join(__dirname, '../frontend/build')));
 
 /**
  * Konvertiert ein Datum in die deutsche Zeitzone ("Europe/Berlin")
