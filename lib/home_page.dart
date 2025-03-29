@@ -3,7 +3,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'screens/profile.dart';
 import 'screens/report_dashboard.dart';
 import 'screens/admin_dashboard.dart';
-import 'screens/coach_dashboard.dart'; // Neuer Coach-Screen importieren
+import 'screens/coach_dashboard.dart';
+import 'screens/affiliate_screen.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -17,52 +18,97 @@ class _HomePageState extends State<HomePage> {
   String? userRole;
   bool _roleLoaded = false;
 
-  // Standardseiten (Profil, Reporting)
-  final List<Widget> _defaultPages = [
+  // Standardseiten für Nutzer mit der Rolle "user"
+  final List<Widget> _userPages = [
     const ProfileScreen(),
-    ReportDashboardScreen(),
+    const AffiliateScreen(),
   ];
 
-  // Extra-Seiten für Admin und Coach
-  final Widget _adminPage = AdminDashboardScreen();
-  final Widget _coachPage = const CoachDashboardScreen();
+  // Extra-Seiten für Admins
+  final List<Widget> _adminPages = [
+    const ProfileScreen(),
+    const ReportDashboardScreen(),
+    const AffiliateScreen(),
+    AdminDashboardScreen(),
+  ];
+
+  // Extra-Seiten für Coaches
+  final List<Widget> _coachPages = [
+    const ProfileScreen(),
+    const AffiliateScreen(),
+    const CoachDashboardScreen(),
+  ];
 
   List<Widget> get _pages {
     if (userRole == 'admin') {
-      return [..._defaultPages, _adminPage];
+      return _adminPages;
     } else if (userRole == 'coach') {
-      return [..._defaultPages, _coachPage];
+      return _coachPages;
+    } else if (userRole == 'user') {
+      return _userPages;
     }
-    return _defaultPages;
+    // Falls keine Rolle gesetzt ist, wird standardmäßig die Nutzer-Variante genutzt
+    return _userPages;
   }
 
   List<BottomNavigationBarItem> get _navigationItems {
-    List<BottomNavigationBarItem> items = [
-      const BottomNavigationBarItem(
-        icon: Icon(Icons.person),
-        label: 'Profil',
-      ),
-      const BottomNavigationBarItem(
-        icon: Icon(Icons.bar_chart),
-        label: 'Reporting',
-      ),
-    ];
     if (userRole == 'admin') {
-      items.add(
-        const BottomNavigationBarItem(
+      return const [
+        BottomNavigationBarItem(
+          icon: Icon(Icons.person),
+          label: 'Profil',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.bar_chart),
+          label: 'Reporting',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.local_offer),
+          label: 'Deals',
+        ),
+        BottomNavigationBarItem(
           icon: Icon(Icons.admin_panel_settings),
           label: 'Admin',
         ),
-      );
+      ];
     } else if (userRole == 'coach') {
-      items.add(
-        const BottomNavigationBarItem(
+      return const [
+        BottomNavigationBarItem(
+          icon: Icon(Icons.person),
+          label: 'Profil',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.local_offer),
+          label: 'Deals',
+        ),
+        BottomNavigationBarItem(
           icon: Icon(Icons.supervisor_account),
           label: 'Coach',
         ),
-      );
+      ];
+    } else if (userRole == 'user') {
+      return const [
+        BottomNavigationBarItem(
+          icon: Icon(Icons.person),
+          label: 'Profil',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.local_offer),
+          label: 'Deals',
+        ),
+      ];
     }
-    return items;
+    // Standardmäßig für den Fall, dass keine Rolle gesetzt ist:
+    return const [
+      BottomNavigationBarItem(
+        icon: Icon(Icons.person),
+        label: 'Profil',
+      ),
+      BottomNavigationBarItem(
+        icon: Icon(Icons.local_offer),
+        label: 'Deals',
+      ),
+    ];
   }
 
   Future<void> _loadUserRole() async {

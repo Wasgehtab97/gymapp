@@ -8,9 +8,9 @@ class StreakBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Verwende zentrales Theme für Farben und Textstile:
+    // Verwende zentrale Farben, hier wird das Icon explizit in einem feurigen Orange gezeichnet.
     final borderColor = Theme.of(context).dividerColor;
-    final iconColor = Theme.of(context).colorScheme.secondary;
+    final iconColor = Colors.deepOrange; // Realistischere Farbe für eine Flamme
     final textStyle = Theme.of(context).textTheme.bodyLarge?.copyWith(
       fontSize: size * 0.33,
       fontWeight: FontWeight.bold,

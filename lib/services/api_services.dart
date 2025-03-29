@@ -39,7 +39,7 @@ class ApiService {
     }
   }
 
-  // Neue Methode: Gerät anhand von device_id und secret_code abrufen
+  // Gerät anhand von device_id und secret_code abrufen
   Future<Map<String, dynamic>> getDeviceBySecret(int deviceId, String secretCode) async {
     final response = await http.get(Uri.parse('$baseUrl/api/device_by_secret?device_id=$deviceId&secret_code=$secretCode'));
     if (response.statusCode == 200) {
@@ -131,11 +131,16 @@ class ApiService {
     }
   }
 
-  // Trainingsdaten posten
+  // Trainingsdaten posten – neuer Endpoint, der auch den Token-Header sendet
   Future<void> postTrainingData(Map<String, dynamic> trainingData) async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('token') ?? '';
     final response = await http.post(
       Uri.parse('$baseUrl/api/training'),
-      headers: {'Content-Type': 'application/json'},
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
       body: jsonEncode(trainingData),
     );
     if (response.statusCode != 200) {
@@ -431,6 +436,68 @@ class ApiService {
     );
     if (response.statusCode != 200) {
       throw Exception('Failed to track click: ${response.statusCode}');
+    }
+  }
+
+  // ---------------------------
+  // Neue Methode: Eigene Übung anlegen
+  // ---------------------------
+  Future<Map<String, dynamic>> createCustomExercise(int userId, int deviceId, String exerciseName) async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('token') ?? '';
+    final response = await http.post(
+      Uri.parse('$baseUrl/api/custom_exercise'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({
+        'userId': userId,
+        'deviceId': deviceId,
+        'name': exerciseName,
+      }),
+    );
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body)['data'] as Map<String, dynamic>;
+    } else {
+      throw Exception('Failed to create custom exercise: ${response.statusCode}');
+    }
+  }
+
+  // Neue Methode: Custom Exercises abrufen
+  Future<List<dynamic>> getCustomExercises(int userId, int deviceId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('token') ?? '';
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/custom_exercises?userId=$userId&deviceId=$deviceId'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+    );
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      return data['data'];
+    } else {
+      throw Exception('Failed to load custom exercises: ${response.statusCode}');
+    }
+  }
+
+  // Neue Methode: Custom Exercise löschen (inkl. Verlauf)
+  Future<Map<String, dynamic>> deleteCustomExercise(int userId, int deviceId, String exerciseName) async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('token') ?? '';
+    final response = await http.delete(
+      Uri.parse('$baseUrl/api/custom_exercise?userId=$userId&deviceId=$deviceId&name=${Uri.encodeComponent(exerciseName)}'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+    );
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body)['data'] as Map<String, dynamic>;
+    } else {
+      throw Exception('Failed to delete custom exercise: ${response.statusCode}');
     }
   }
 }

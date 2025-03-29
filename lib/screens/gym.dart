@@ -146,7 +146,10 @@ class _GymScreenState extends State<GymScreen> {
                     borderRadius: BorderRadius.circular(30),
                   ),
                   child: TextField(
-                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: Colors.white),
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodyLarge
+                        ?.copyWith(color: Colors.white),
                     decoration: InputDecoration(
                       hintText: 'Gerät suchen...',
                       hintStyle: Theme.of(context).inputDecorationTheme.hintStyle,
@@ -175,13 +178,7 @@ class _GymScreenState extends State<GymScreen> {
                                 style: Theme.of(context).textTheme.bodyLarge,
                               ),
                             )
-                          : GridView.builder(
-                              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount: 3,
-                                crossAxisSpacing: 8,
-                                mainAxisSpacing: 8,
-                                childAspectRatio: 1,
-                              ),
+                          : ListView.builder(
                               itemCount: filteredDevices.length,
                               itemBuilder: (context, index) {
                                 final device = filteredDevices[index];
@@ -202,37 +199,64 @@ class _GymScreenState extends State<GymScreen> {
                                       borderRadius: BorderRadius.circular(16),
                                     ),
                                     elevation: 4,
+                                    margin: const EdgeInsets.only(bottom: 12),
                                     child: Container(
+                                      width: double.infinity,
+                                      height: 80,
+                                      padding: const EdgeInsets.symmetric(horizontal: 16),
                                       decoration: BoxDecoration(
                                         borderRadius: BorderRadius.circular(16),
                                         gradient: LinearGradient(
                                           colors: [
-                                            Theme.of(context).colorScheme.secondary.withOpacity(0.2),
+                                            Theme.of(context)
+                                                .colorScheme
+                                                .secondary
+                                                .withOpacity(0.2),
                                             Theme.of(context).colorScheme.secondary,
                                           ],
                                           begin: Alignment.topLeft,
                                           end: Alignment.bottomRight,
                                         ),
                                       ),
-                                      child: Column(
-                                        mainAxisAlignment: MainAxisAlignment.center,
+                                      child: Stack(
                                         children: [
-                                          const Icon(
-                                            Icons.fitness_center,
-                                            size: 36,
-                                            color: Colors.white,
-                                          ),
-                                          const SizedBox(height: 4),
-                                          Padding(
-                                            padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                                            child: Text(
-                                              device['name'],
-                                              textAlign: TextAlign.center,
-                                              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                                                    fontSize: 14,
-                                                    fontWeight: FontWeight.bold,
-                                                    color: Colors.white,
+                                          // Geräte-Name zentriert
+                                          Align(
+                                            alignment: Alignment.centerLeft,
+                                            child: Row(
+                                              children: [
+                                                const Icon(
+                                                  Icons.fitness_center,
+                                                  size: 36,
+                                                  color: Colors.white,
+                                                ),
+                                                const SizedBox(width: 16),
+                                                Expanded(
+                                                  child: Text(
+                                                    device['name'],
+                                                    style: Theme.of(context)
+                                                        .textTheme
+                                                        .bodyLarge
+                                                        ?.copyWith(
+                                                          fontSize: 16,
+                                                          fontWeight: FontWeight.bold,
+                                                          color: Colors.white,
+                                                        ),
                                                   ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          // Geräte-ID oben rechts
+                                          Positioned(
+                                            top: 4,
+                                            right: 8,
+                                            child: Text(
+                                              device['id'].toString(),
+                                              style: Theme.of(context)
+                                                  .textTheme
+                                                  .bodySmall
+                                                  ?.copyWith(color: Colors.white70),
                                             ),
                                           ),
                                         ],

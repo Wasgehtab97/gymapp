@@ -22,6 +22,14 @@ class Calendar extends StatelessWidget {
     return "$year-$month-$day";
   }
 
+  /// Konvertiert ein Datum in die deutsche Zeitzone (Europe/Berlin) und formatiert es als "YYYY-MM-DD".
+  String _getGermanDateString(DateTime date) {
+    // Wir rechnen hier explizit 1 Stunde hinzu, falls die UTC-Zeit 1 Stunde hinter der deutschen liegt.
+    // Falls deine Server- bzw. Gerätezeit bereits in der deutschen Zeitzone ist, kann dieser Schritt entfallen.
+    final germanDate = date.toUtc().add(const Duration(hours: 1));
+    return _formatDate(germanDate);
+  }
+
   /// Erzeugt eine Liste aller Tage des aktuellen Jahres.
   List<DateTime> _getAllDaysOfYear() {
     final currentYear = DateTime.now().year;
@@ -44,17 +52,15 @@ class Calendar extends StatelessWidget {
     final int firstWeekdayOffset = DateTime(allDays.first.year, 1, 1).weekday - 1;
     final List<DateTime?> cells = List<DateTime?>.filled(firstWeekdayOffset, null, growable: true)
       ..addAll(allDays);
-    // Am Ende auffüllen, sodass die Gesamtanzahl ein Vielfaches von 7 ist.
+    // Auffüllen, sodass die Gesamtanzahl ein Vielfaches von 7 ist.
     final int remainder = cells.length % rows;
     if (remainder != 0) {
       cells.addAll(List<DateTime?>.filled(rows - remainder, null));
     }
-    // Anzahl der Spalten (Wochen)
     final int columns = (cells.length / rows).ceil();
-    // Gesamtbreite des Kalenders
     final double totalWidth = columns * (cellSize + cellSpacing);
 
-    // Header: 12 gleich breite Zellen für die Monatskürzel.
+    // Header: Monatskürzel
     final double headerCellWidth = totalWidth / 12;
     final List<String> monthLabels = ["Ja", "Fe", "M", "A", "Ma", "Jun", "Jul", "Au", "S", "O", "N", "D"];
     final List<Widget> headerCells = List.generate(12, (index) {
@@ -63,12 +69,14 @@ class Calendar extends StatelessWidget {
         child: Center(
           child: Text(
             monthLabels[index],
-            textAlign: TextAlign.center,
             style: theme.textTheme.bodySmall?.copyWith(fontSize: 8, color: Colors.white),
           ),
         ),
       );
     });
+
+    // Errechne "heute" in deutscher Zeit
+    final String todayString = _getGermanDateString(DateTime.now());
 
     // Erstelle den Kalender-Grid als Table.
     final List<TableRow> tableRows = [];
@@ -78,9 +86,9 @@ class Calendar extends StatelessWidget {
         final int index = c * rows + r;
         if (index < cells.length && cells[index] != null) {
           final DateTime day = cells[index]!;
-          final DateTime today = DateTime.now();
           final bool isTraining = _isTrainingDay(day);
-          final bool isToday = day.year == today.year && day.month == today.month && day.day == today.day;
+          // Bestimme den Tag in deutscher Zeit
+          final bool isToday = _getGermanDateString(day) == todayString;
           rowCells.add(Padding(
             padding: EdgeInsets.all(cellSpacing / 2),
             child: SizedBox(
@@ -92,7 +100,7 @@ class Calendar extends StatelessWidget {
                   borderRadius: BorderRadius.circular(3),
                   border: Border.all(
                     width: isToday ? 1.5 : 1.0,
-                    color: isToday ? theme.colorScheme.secondary : Colors.white,
+                    color: isToday ? Colors.red : Colors.white,
                   ),
                 ),
               ),

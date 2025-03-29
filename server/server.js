@@ -1,3 +1,6 @@
+// Laden der Umgebungsvariablen
+require('dotenv').config();
+
 const express = require('express');
 const path = require('path');
 const cors = require('cors');
@@ -35,10 +38,27 @@ function adminOnly(req, res, next) {
   }
   const token = authHeader.split(' ')[1];
   try {
-    const decoded = jwt.verify(token, 'schluessel');
+    // JWT_SECRET wird aus der .env-Datei geladen
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
     if (decoded.role !== 'admin') {
       return res.status(403).json({ error: 'Nicht autorisiert.' });
     }
+    req.user = decoded;
+    next();
+  } catch (error) {
+    return res.status(401).json({ error: 'Ungültiger Token.' });
+  }
+}
+
+/**
+ * Middleware zur Token-Überprüfung (für Endpunkte, die keine Admin-Rechte benötigen)
+ */
+function verifyToken(req, res, next) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) return res.status(401).json({ error: 'Kein Token gefunden.' });
+  const token = authHeader.split(' ')[1];
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
     req.user = decoded;
     next();
   } catch (error) {
@@ -54,7 +74,7 @@ app.get('/api/user/:id', async (req, res) => {
   const { id } = req.params;
   try {
     const result = await pool.query(
-      'SELECT id, name, exp_progress, division_index, role, coach_id FROM users WHERE id = $1',
+      'SELECT id, name, exp_progress, division_index, current_streak, role, coach_id FROM users WHERE id = $1',
       [id]
     );
     if (!result.rows.length)
@@ -66,10 +86,27 @@ app.get('/api/user/:id', async (req, res) => {
   }
 });
 
+app.get('/api/streak/:userId', async (req, res) => {
+  const { userId } = req.params;
+  try {
+    const result = await pool.query(
+      'SELECT current_streak FROM users WHERE id = $1',
+      [userId]
+    );
+    if (!result.rows.length) {
+      return res.status(404).json({ error: 'Benutzer nicht gefunden.' });
+    }
+    res.json({ data: { current_streak: result.rows[0].current_streak } });
+  } catch (error) {
+    console.error('Fehler beim Abrufen der Streak:', error.message);
+    res.status(500).json({ error: 'Serverfehler beim Abrufen der Streak' });
+  }
+});
+
 app.get('/api/users', async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT id, name, exp_progress, division_index FROM users ORDER BY name'
+      'SELECT id, name, exp_progress, division_index, current_streak FROM users ORDER BY name'
     );
     res.json({ message: 'Alle Nutzer erfolgreich abgerufen', data: result.rows });
   } catch (error) {
@@ -96,13 +133,13 @@ app.post('/api/register', async (req, res) => {
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
     const newUserResult = await pool.query(
-      'INSERT INTO users (name, email, password, membership_number, exp_progress, division_index) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
-      [name, email, hashedPassword, membershipNumber, 0, 0]
+      'INSERT INTO users (name, email, password, membership_number, exp_progress, division_index, current_streak) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
+      [name, email, hashedPassword, membershipNumber, 0, 0, 0]
     );
     const user = newUserResult.rows[0];
     const token = jwt.sign(
       { userId: user.id, role: user.role, userExp: user.exp_progress },
-      'schluessel',
+      process.env.JWT_SECRET,
       { expiresIn: '1h' }
     );
     res.json({ message: 'Benutzer erfolgreich registriert', token });
@@ -124,7 +161,7 @@ app.post('/api/login', async (req, res) => {
       return res.status(401).json({ error: 'Ungültige Anmeldedaten' });
     const token = jwt.sign(
       { userId: user.id, role: user.role, userExp: user.exp_progress },
-      'schluessel',
+      process.env.JWT_SECRET,
       { expiresIn: '1h' }
     );
     res.json({
@@ -135,6 +172,7 @@ app.post('/api/login', async (req, res) => {
       role: user.role,
       exp_progress: user.exp_progress,
       division_index: user.division_index,
+      current_streak: user.current_streak,
     });
   } catch (error) {
     console.error('Login-Fehler:', error.message);
@@ -146,7 +184,6 @@ app.post('/api/login', async (req, res) => {
 // Geräte & Trainingsdaten
 // ----------------------
 
-// POST Gerät anlegen – secret_code wird automatisch generiert
 app.post('/api/devices', adminOnly, async (req, res) => {
   const { name, exercise_mode } = req.body;
   if (!name)
@@ -164,7 +201,6 @@ app.post('/api/devices', adminOnly, async (req, res) => {
   }
 });
 
-// Neuer Endpoint: Gerät anhand von ID und secret_code abrufen
 app.get('/api/device_by_secret', async (req, res) => {
   const { device_id, secret_code } = req.query;
   if (!device_id || !secret_code) {
@@ -185,7 +221,79 @@ app.get('/api/device_by_secret', async (req, res) => {
   }
 });
 
-// GET Trainingshistorie für ein bestimmtes Gerät
+app.post('/api/training', async (req, res) => {
+  const { userId, deviceId, trainingDate, data } = req.body;
+  if (!userId || !deviceId || !trainingDate || !data || !Array.isArray(data) || data.length === 0) {
+    return res.status(400).json({ error: 'Ungültige Eingabedaten.' });
+  }
+  
+  try {
+    const checkResult = await pool.query(
+      'SELECT COUNT(*) FROM training_history WHERE user_id = $1 AND training_date = $2',
+      [userId, trainingDate]
+    );
+    const alreadyTrained = parseInt(checkResult.rows[0].count) > 0;
+    
+    const insertedRows = [];
+    for (let i = 0; i < data.length; i++) {
+      const set = data[i];
+      const setNumber = set.setNumber || i + 1;
+      if (set.reps === undefined || set.weight === undefined || set.reps === "" || set.weight === "") {
+        return res.status(400).json({ error: 'Alle Sätze müssen vollständig ausgefüllt sein.' });
+      }
+      const result = await pool.query(
+        'INSERT INTO training_history (user_id, device_id, training_date, exercise, sets, reps, weight) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
+        [
+          userId,
+          deviceId,
+          trainingDate,
+          set.exercise,
+          setNumber,
+          parseInt(set.reps),
+          parseFloat(set.weight)
+        ]
+      );
+      insertedRows.push(result.rows[0]);
+    }
+    
+    if (!alreadyTrained) {
+      const userResult = await pool.query(
+        'SELECT exp_progress, division_index, current_streak FROM users WHERE id = $1',
+        [userId]
+      );
+      let { exp_progress, division_index, current_streak } = userResult.rows[0];
+      const newExp = exp_progress + 25;
+      const divisionsGained = Math.floor(newExp / 1000);
+      const remainingExp = newExp % 1000;
+      
+      const lastTrainingResult = await pool.query(
+        'SELECT MAX(training_date) AS last_date FROM training_history WHERE user_id = $1 AND training_date < $2',
+        [userId, trainingDate]
+      );
+      
+      let newStreak;
+      if (!lastTrainingResult.rows[0].last_date) {
+        newStreak = 1;
+      } else {
+        const lastDate = new Date(lastTrainingResult.rows[0].last_date);
+        const currentDate = new Date(trainingDate);
+        const diffDays = Math.floor((currentDate - lastDate) / (1000 * 60 * 60 * 24));
+        newStreak = (diffDays >= 4) ? 1 : current_streak + 1;
+      }
+      
+      await pool.query(
+        'UPDATE users SET division_index = division_index + $1, exp_progress = $2, current_streak = $3 WHERE id = $4',
+        [divisionsGained, remainingExp, newStreak, userId]
+      );
+    }
+    
+    res.json({ message: 'Trainingseinheit erfolgreich gespeichert', data: insertedRows });
+  } catch (error) {
+    console.error('Fehler beim Speichern der Trainingsdaten:', error.message);
+    res.status(500).json({ error: 'Serverfehler beim Speichern der Trainingsdaten' });
+  }
+});
+
 app.get('/api/device/:id', async (req, res) => {
   const { id: deviceId } = req.params;
   if (!deviceId || isNaN(deviceId))
@@ -204,7 +312,6 @@ app.get('/api/device/:id', async (req, res) => {
   }
 });
 
-// GET Trainingshistorie für einen Nutzer
 app.get('/api/history/:userId', async (req, res) => {
   const { userId } = req.params;
   if (!userId)
@@ -230,7 +337,6 @@ app.get('/api/history/:userId', async (req, res) => {
   }
 });
 
-// GET alle Geräte
 app.get('/api/devices', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM devices ORDER BY id');
@@ -241,7 +347,6 @@ app.get('/api/devices', async (req, res) => {
   }
 });
 
-// PUT: Gerätedaten aktualisieren (nur Admin)
 app.put('/api/devices/:id', adminOnly, async (req, res) => {
   const { id } = req.params;
   const { name, exercise_mode } = req.body;
@@ -265,10 +370,9 @@ app.put('/api/devices/:id', adminOnly, async (req, res) => {
 // Affiliate-Endpunkte
 // ----------------------
 
-// GET /api/affiliate_offers: Liefert alle aktiven Affiliate-Angebote
 app.get('/api/affiliate_offers', async (req, res) => {
   try {
-    const today = new Date().toISOString().split('T')[0]; // Format "YYYY-MM-DD"
+    const today = new Date().toISOString().split('T')[0];
     const result = await pool.query(
       `SELECT * FROM affiliate_offers 
        WHERE (start_date IS NULL OR start_date <= $1)
@@ -283,7 +387,6 @@ app.get('/api/affiliate_offers', async (req, res) => {
   }
 });
 
-// POST /api/affiliate_click: Erfasst Klicks auf Affiliate-Links
 app.post('/api/affiliate_click', async (req, res) => {
   const { offer_id, user_id } = req.body;
   if (!offer_id)
@@ -300,7 +403,6 @@ app.post('/api/affiliate_click', async (req, res) => {
   }
 });
 
-// POST /api/affiliate_conversion: Erfasst Conversions (optional)
 app.post('/api/affiliate_conversion', async (req, res) => {
   const { offer_id, user_id, conversion_value } = req.body;
   if (!offer_id || !conversion_value)
@@ -321,7 +423,6 @@ app.post('/api/affiliate_conversion', async (req, res) => {
 // Reporting & Feedback
 // ----------------------
 
-// GET Reporting-Daten
 app.get('/api/reporting/usage', async (req, res) => {
   const { startDate, endDate, deviceId } = req.query;
   let values = [], paramIndex = 1;
@@ -354,7 +455,6 @@ app.get('/api/reporting/usage', async (req, res) => {
   }
 });
 
-// POST Feedback
 app.post('/api/feedback', async (req, res) => {
   const { userId, deviceId, feedback_text } = req.body;
   if (!userId || !deviceId || !feedback_text)
@@ -371,7 +471,6 @@ app.post('/api/feedback', async (req, res) => {
   }
 });
 
-// GET Feedback
 app.get('/api/feedback', async (req, res) => {
   const { deviceId, status } = req.query;
   let query = 'SELECT * FROM feedback', values = [], conditions = [];
@@ -393,7 +492,6 @@ app.get('/api/feedback', async (req, res) => {
   }
 });
 
-// PUT Feedback aktualisieren
 app.put('/api/feedback/:id', async (req, res) => {
   const { id } = req.params;
   const { status } = req.body;
@@ -417,14 +515,13 @@ app.put('/api/feedback/:id', async (req, res) => {
 // Trainingspläne
 // ----------------------
 
-// POST Trainingspläne erstellen
 app.post('/api/training-plans', async (req, res) => {
   const { userId, name } = req.body;
   if (!userId || !name)
     return res.status(400).json({ error: 'Ungültige Eingabedaten.' });
   try {
     const result = await pool.query(
-      'INSERT INTO training_plans (user_id, name, created_at, status) VALUES ($1, $2, NOW(), $3) RETURNING *',
+      'INSERT INTO training_plans (userId, name, created_at, status) VALUES ($1, $2, NOW(), $3) RETURNING *',
       [userId, name, 'inaktiv']
     );
     res.json({ message: 'Trainingsplan erfolgreich erstellt', data: result.rows[0] });
@@ -434,7 +531,6 @@ app.post('/api/training-plans', async (req, res) => {
   }
 });
 
-// GET Trainingspläne abrufen
 app.get('/api/training-plans/:userId', async (req, res) => {
   const { userId } = req.params;
   if (!userId)
@@ -452,7 +548,7 @@ app.get('/api/training-plans/:userId', async (req, res) => {
        FROM training_plans tp
        LEFT JOIN training_plan_exercises tpe ON tp.id = tpe.plan_id
        LEFT JOIN devices d ON tpe.device_id = d.id
-       WHERE tp.user_id = $1
+       WHERE tp.userId = $1
        GROUP BY tp.id
        ORDER BY tp.created_at DESC`,
       [userId]
@@ -464,7 +560,6 @@ app.get('/api/training-plans/:userId', async (req, res) => {
   }
 });
 
-// PUT Trainingsplan aktualisieren
 app.put('/api/training-plans/:planId', async (req, res) => {
   const { planId } = req.params;
   const { exercises } = req.body;
@@ -502,7 +597,6 @@ app.put('/api/training-plans/:planId', async (req, res) => {
   }
 });
 
-// DELETE Trainingsplan
 app.delete('/api/training-plans/:planId', async (req, res) => {
   const { planId } = req.params;
   if (!planId)
@@ -513,11 +607,10 @@ app.delete('/api/training-plans/:planId', async (req, res) => {
     res.json({ message: 'Trainingsplan erfolgreich gelöscht' });
   } catch (error) {
     console.error('Fehler beim Löschen des Trainingsplans:', error.message);
-    res.status(500).json({ error: 'Serverfehler beim Löschen des Trainingsplänen' });
+    res.status(500).json({ error: 'Serverfehler beim Löschen des Trainingsplans' });
   }
 });
 
-// POST Trainingsplan starten
 app.post('/api/training-plans/:planId/start', async (req, res) => {
   const { planId } = req.params;
   if (!planId)
@@ -622,7 +715,81 @@ app.get('/api/coach/clients', async (req, res) => {
   }
 });
 
+// ----------------------
+// Neuer Endpoint: Eigene Übung erstellen
+// ----------------------
+app.post('/api/custom_exercise', verifyToken, async (req, res) => {
+  const { userId, deviceId, name } = req.body;
+  if (!userId || !deviceId || !name) {
+    return res.status(400).json({ error: 'Ungültige Eingabedaten.' });
+  }
+  try {
+    const exists = await pool.query(
+      'SELECT * FROM custom_exercises WHERE user_id = $1 AND device_id = $2 AND name = $3',
+      [userId, deviceId, name]
+    );
+    if (exists.rows.length) {
+      return res.json({ message: 'Custom Exercise bereits vorhanden', data: exists.rows[0] });
+    }
+    const result = await pool.query(
+      'INSERT INTO custom_exercises (user_id, device_id, name, created_at) VALUES ($1, $2, $3, NOW()) RETURNING *',
+      [userId, deviceId, name]
+    );
+    res.json({ message: 'Custom Exercise erfolgreich erstellt', data: result.rows[0] });
+  } catch (error) {
+    console.error('Fehler beim Erstellen der Custom Exercise:', error.message);
+    res.status(500).json({ error: 'Serverfehler beim Erstellen der Custom Exercise' });
+  }
+});
+
+// Neuer GET-Endpoint: Custom Exercises abrufen
+app.get('/api/custom_exercises', verifyToken, async (req, res) => {
+  const { userId, deviceId } = req.query;
+  if (!userId || !deviceId) {
+    return res.status(400).json({ error: 'userId und deviceId sind erforderlich.' });
+  }
+  try {
+    const result = await pool.query(
+      'SELECT * FROM custom_exercises WHERE user_id = $1 AND device_id = $2',
+      [userId, deviceId]
+    );
+    res.json({ message: 'Custom Exercises erfolgreich abgerufen', data: result.rows });
+  } catch (error) {
+    console.error('Fehler beim Abrufen der Custom Exercises:', error.message);
+    res.status(500).json({ error: 'Serverfehler beim Abrufen der Custom Exercises' });
+  }
+});
+
+// Neuer DELETE-Endpoint: Custom Exercise inklusive Verlauf löschen
+app.delete('/api/custom_exercise', verifyToken, async (req, res) => {
+  const { userId, deviceId, name } = req.query;
+  if (!userId || !deviceId || !name) {
+    return res.status(400).json({ error: 'userId, deviceId und name sind erforderlich.' });
+  }
+  try {
+    // Zuerst alle zugehörigen Trainingseinträge löschen
+    await pool.query(
+      'DELETE FROM training_history WHERE user_id = $1 AND device_id = $2 AND exercise = $3',
+      [userId, deviceId, name]
+    );
+    // Dann den Custom Exercise-Eintrag entfernen
+    const result = await pool.query(
+      'DELETE FROM custom_exercises WHERE user_id = $1 AND device_id = $2 AND name = $3 RETURNING *',
+      [userId, deviceId, name]
+    );
+    if (!result.rows.length) {
+      return res.status(404).json({ error: 'Custom Exercise nicht gefunden.' });
+    }
+    res.json({ message: 'Custom Exercise und zugehöriger Verlauf erfolgreich gelöscht', data: result.rows[0] });
+  } catch (error) {
+    console.error('Fehler beim Löschen der Custom Exercise:', error.message);
+    res.status(500).json({ error: 'Serverfehler beim Löschen der Custom Exercise' });
+  }
+});
+
+// ----------------------
 // Fallback: Alle anderen Routen liefern die index.html
+// ----------------------
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '../frontend/build', 'index.html'));
 });

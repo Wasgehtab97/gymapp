@@ -9,11 +9,10 @@ import '../widgets/calendar.dart';
 import '../widgets/full_screen_calendar.dart';
 import 'gym.dart';
 import 'rank.dart';
-import 'affiliate_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
-  
+
   @override
   ProfileScreenState createState() => ProfileScreenState();
 }
@@ -96,6 +95,7 @@ class ProfileScreenState extends State<ProfileScreen> {
     try {
       final response = await apiService.getDataFromUrl('/api/history/${userId!}');
       if (response['data'] != null) {
+        // Extrahiere alle eindeutigen Trainingstage im Format "YYYY-MM-DD"
         final dates = (response['data'] as List)
           .map<String>((entry) {
             DateTime d = DateTime.parse(entry['training_date']);
@@ -118,7 +118,6 @@ class ProfileScreenState extends State<ProfileScreen> {
   
   Future<void> _fetchCoachingRequest() async {
     try {
-      // Das Abrufen von SharedPreferences entfällt hier, da das Objekt nicht verwendet wird.
       final response = await apiService.getDataFromUrl('/api/coaching/request?clientId=$userId');
       if (response['data'] != null && (response['data'] as List).isNotEmpty) {
         setState(() {
@@ -168,7 +167,6 @@ class ProfileScreenState extends State<ProfileScreen> {
   
   @override
   Widget build(BuildContext context) {
-    // Falls kein Token vorhanden ist, zeige Login/Registrierung
     if (token == null || token!.isEmpty) {
       return Scaffold(
         appBar: AppBar(
@@ -299,22 +297,7 @@ class ProfileScreenState extends State<ProfileScreen> {
                           ),
                         ),
                       ),
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Theme.of(context).primaryColor,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                      ),
-                      onPressed: () {
-                        Navigator.pushNamed(context, '/trainingsplan');
-                      },
-                      child: Center(
-                        child: Text(
-                          "Trainingsplan",
-                          style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 18),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
+                    // Zuerst Gym, dann Plans
                     ElevatedButton(
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Theme.of(context).primaryColor,
@@ -328,7 +311,7 @@ class ProfileScreenState extends State<ProfileScreen> {
                       },
                       child: Center(
                         child: Text(
-                          "Gym Geräteübersicht",
+                          "Gym",
                           style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 18),
                         ),
                       ),
@@ -340,14 +323,11 @@ class ProfileScreenState extends State<ProfileScreen> {
                         padding: const EdgeInsets.symmetric(vertical: 14),
                       ),
                       onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (context) => const AffiliateScreen()),
-                        );
+                        Navigator.pushNamed(context, '/trainingsplan');
                       },
                       child: Center(
                         child: Text(
-                          "Deals",
+                          "Plans",
                           style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 18),
                         ),
                       ),

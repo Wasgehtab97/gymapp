@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_services.dart';
-import '../widgets/feedback_form.dart'; // WICHTIG: FeedbackForm importieren
+import '../widgets/feedback_form.dart';
 
 class DashboardScreen extends StatefulWidget {
   final List<int>? activeTrainingPlan;
@@ -40,19 +40,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
   final ApiService apiService = ApiService();
   late String trainingDate;
 
-  // Variablen für Trainingsplan und Übungsauswahl
+  // Trainingsplan-/Übungsauswahl
   List<int>? activePlan;
   int? activePlanIndex;
   String? selectedExercise;
 
   bool _initialized = false;
 
-  // Dummy-Liste für Übungsauswahl im "multi"-Modus
-  final List<String> multiExerciseOptions = [
+  // Standardübungen (nur im "multi"-Modus voreingestellt)
+  final List<String> defaultExercises = [
     "Benchpress",
     "Squat",
     "Deadlift"
   ];
+  // Je nach device.exercise_mode: Bei "multi" werden defaultExercises genutzt, bei "custom" bleibt die Liste zunächst leer.
+  List<String> multiExerciseOptions = [];
 
   @override
   void initState() {
@@ -60,6 +62,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     trainingDate = _formatLocalDate(DateTime.now());
     weightControllers.add(TextEditingController(text: setsData[0]['weight']));
     repsControllers.add(TextEditingController(text: setsData[0]['reps']));
+    // Standardmäßig gehen wir von "multi" aus – dieser Wert wird in _fetchDeviceInfo() angepasst.
+    multiExerciseOptions = List.from(defaultExercises);
   }
 
   @override
@@ -101,8 +105,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
             deviceId = device['id'];
             deviceInfo = device;
           });
+          // Abhängig vom exercise_mode: Bei "custom" keine Standardübungen, bei "multi" defaultExercises laden
+          final mode = device['exercise_mode'].toString().toLowerCase();
+          if (mode == 'custom') {
+            multiExerciseOptions = [];
+          } else if (mode == 'multi') {
+            multiExerciseOptions = List.from(defaultExercises);
+          }
+          _fetchCustomExercises();
         }).catchError((error) {
-          debugPrint('Fehler beim Abrufen des Geräts mit secretCode: $error');
+          debugPrint('Fehler beim Abrufen des Geräts: $error');
         });
       } else if (args.containsKey('activeTrainingPlan') && args.containsKey('currentIndex')) {
         activePlan = List<int>.from(args['activeTrainingPlan']);
@@ -140,6 +152,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
         setState(() {
           deviceInfo = found;
         });
+        if (found != null) {
+          final mode = found['exercise_mode'].toString().toLowerCase();
+          if (mode == 'custom') {
+            multiExerciseOptions = [];
+          } else if (mode == 'multi') {
+            multiExerciseOptions = List.from(defaultExercises);
+          }
+          _fetchCustomExercises();
+        }
       } catch (error) {
         debugPrint('Fehler beim Abrufen der Geräteinformationen: $error');
       }
@@ -153,10 +174,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
       });
       return;
     }
+    // Nur Trainingshistorie laden, wenn bereits eine Übung ausgewählt wurde
+    if (selectedExercise == null) {
+      setState(() {
+        lastSession = [];
+        lastTrainingDate = "";
+        isLoading = false;
+      });
+      return;
+    }
     try {
-      final history = selectedExercise != null
-          ? await apiService.getHistory(userId!, exercise: selectedExercise)
-          : await apiService.getHistory(userId!, deviceId: deviceId!);
+      final history = await apiService.getHistory(userId!, exercise: selectedExercise);
       if (history.isNotEmpty) {
         history.sort((a, b) =>
             DateTime.parse(b['training_date']).compareTo(DateTime.parse(a['training_date'])));
@@ -184,6 +212,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
       setState(() {
         isLoading = false;
       });
+    }
+  }
+
+  /// Lädt alle Custom Exercises für den aktuellen Nutzer und das aktuelle Gerät vom Server
+  Future<void> _fetchCustomExercises() async {
+    if (userId == null || deviceId == null) return;
+    try {
+      final customExercises = await apiService.getCustomExercises(userId!, deviceId!);
+      setState(() {
+        for (var ex in customExercises) {
+          String name = ex['name'];
+          if (!multiExerciseOptions.contains(name)) {
+            multiExerciseOptions.add(name);
+          }
+        }
+      });
+    } catch (error) {
+      debugPrint("Fehler beim Laden der Custom Exercises: $error");
     }
   }
 
@@ -285,7 +331,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  /// Widget zur Auswahl im "multi"-Modus
+  /// Widget für die Übungsauswahl im Modus "multi" oder "custom"
+  /// (Hier werden nur die aktuell vorhandenen Übungen angezeigt; falls noch keine Übung ausgewählt wurde,
+  ///  erscheint nur die Auswahl, ohne Trainingshistorie).
   Widget _buildMultiExerciseSelection() {
     return Column(
       children: [
@@ -309,8 +357,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
               onPressed: () {
                 setState(() {
                   selectedExercise = exerciseOption;
-                  _fetchLastSession();
                 });
+                _fetchLastSession();
               },
               child: Text(
                 exerciseOption,
@@ -319,9 +367,97 @@ class _DashboardScreenState extends State<DashboardScreen> {
             );
           }).toList(),
         ),
+        // "+" Button zum Hinzufügen eigener Übungen
+        Align(
+          alignment: Alignment.centerLeft,
+          child: IconButton(
+            icon: const Icon(Icons.add),
+            iconSize: 24,
+            color: Theme.of(context).colorScheme.secondary,
+            tooltip: "Eigene Übung hinzufügen",
+            onPressed: _showCustomExerciseDialog,
+          ),
+        ),
         const SizedBox(height: 24),
       ],
     );
+  }
+
+  /// Dialog zum Hinzufügen einer eigenen Übung
+  Future<void> _showCustomExerciseDialog() async {
+    final TextEditingController controller = TextEditingController();
+    await showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text("Eigene Übung hinzufügen"),
+          content: TextField(
+            controller: controller,
+            decoration: const InputDecoration(hintText: "Übungsname"),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text("Abbrechen"),
+            ),
+            TextButton(
+              onPressed: () async {
+                final exerciseName = controller.text.trim();
+                if (exerciseName.isEmpty) return;
+                if (userId == null || deviceId == null) return;
+                try {
+                  final result = await apiService.createCustomExercise(userId!, deviceId!, exerciseName);
+                  setState(() {
+                    if (!multiExerciseOptions.contains(result['name'])) {
+                      multiExerciseOptions.add(result['name']);
+                    }
+                    selectedExercise = result['name'];
+                  });
+                  Navigator.of(context).pop();
+                  _fetchLastSession();
+                } catch (error) {
+                  debugPrint("Fehler beim Erstellen der eigenen Übung: $error");
+                  Navigator.of(context).pop();
+                }
+              },
+              child: const Text("Hinzufügen"),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// Löscht die aktuell ausgewählte Custom Exercise inklusive Verlauf
+  Future<void> _deleteCustomExercise() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Custom Exercise löschen'),
+        content: const Text('Möchtest du diese Übung inklusive Verlauf wirklich löschen?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Abbrechen'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Löschen'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    try {
+      await apiService.deleteCustomExercise(userId!, deviceId!, selectedExercise!);
+      setState(() {
+        multiExerciseOptions.remove(selectedExercise);
+        selectedExercise = null;
+      });
+      _fetchLastSession();
+    } catch (error) {
+      debugPrint("Fehler beim Löschen der Custom Exercise: $error");
+    }
   }
 
   Widget _buildInputTable() {
@@ -524,24 +660,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (deviceId == null) {
-      return Scaffold(
-        appBar: AppBar(
-          title: Text(
-            "Dashboard",
-            style: Theme.of(context).appBarTheme.titleTextStyle,
-          ),
-          backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
-        ),
-        body: Center(
-          child: Text(
-            "Keine gültige Geräte-ID gefunden.",
-            style: Theme.of(context).textTheme.bodyMedium,
-          ),
-        ),
-      );
-    }
-
     final isCurrentSetValid = setsData.last['weight'].toString().trim().isNotEmpty &&
         setsData.last['reps'].toString().trim().isNotEmpty;
     final isAnySetValid = setsData.any((set) =>
@@ -558,6 +676,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
           style: Theme.of(context).appBarTheme.titleTextStyle,
         ),
         backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
+        actions: [
+          if (selectedExercise != null && !defaultExercises.contains(selectedExercise))
+            IconButton(
+              icon: const Icon(Icons.remove),
+              tooltip: "Custom Exercise löschen",
+              onPressed: _deleteCustomExercise,
+            ),
+        ],
       ),
       body: Container(
         decoration: const BoxDecoration(
@@ -575,10 +701,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Text("Datum: $trainingDate",
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 16)),
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodyMedium
+                            ?.copyWith(fontSize: 16)),
                     const SizedBox(height: 16),
+                    // Wenn noch keine Übung ausgewählt wurde, nur die Auswahl anzeigen
                     if (deviceInfo != null &&
-                        deviceInfo!['exercise_mode'].toString().toLowerCase() == 'multi' &&
+                        deviceInfo!['exercise_mode'].toString().toLowerCase() != 'single' &&
                         selectedExercise == null)
                       _buildMultiExerciseSelection()
                     else
@@ -623,19 +753,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 16)),
                     ),
                     const SizedBox(height: 24),
-                    Text("Letzte Trainingseinheit",
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: Theme.of(context).colorScheme.secondary,
-                            )),
+                    // Letzte Trainingseinheit nur anzeigen, wenn eine Übung ausgewählt wurde
+                    if (selectedExercise != null)
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text("Letzte Trainingseinheit",
+                              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: Theme.of(context).colorScheme.secondary,
+                                  )),
+                          const SizedBox(height: 8),
+                          lastTrainingDate.isNotEmpty
+                              ? Text("Datum: ${_formatLocalDate(DateTime.parse(lastTrainingDate))}",
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodyMedium
+                                      ?.copyWith(fontSize: 16))
+                              : Text("Keine Daten vorhanden.",
+                                  style: Theme.of(context).textTheme.bodyMedium),
+                        ],
+                      ),
                     const SizedBox(height: 8),
-                    lastTrainingDate.isNotEmpty
-                        ? Text("Datum: ${_formatLocalDate(DateTime.parse(lastTrainingDate))}",
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 16))
-                        : Text("Keine Daten vorhanden.", style: Theme.of(context).textTheme.bodyMedium),
-                    const SizedBox(height: 8),
-                    if (lastSession.isNotEmpty)
+                    if (selectedExercise != null && lastSession.isNotEmpty)
                       Card(
                         elevation: 4,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -681,12 +822,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   ),
                                 ],
                               ),
-                              ...List<TableRow>.generate(setsData.length, (index) {
+                              ...List<TableRow>.generate(lastSession.length, (index) {
+                                final session = lastSession[index];
                                 return TableRow(
                                   children: [
                                     Padding(
                                       padding: const EdgeInsets.all(8.0),
-                                      child: Text(setsData[index]['setNumber'].toString(),
+                                      child: Text(session['sets'].toString(),
                                           textAlign: TextAlign.center,
                                           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                                                 color: Theme.of(context).colorScheme.secondary,
@@ -694,29 +836,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     ),
                                     Padding(
                                       padding: const EdgeInsets.all(8.0),
-                                      child: TextField(
-                                        keyboardType: TextInputType.number,
-                                        decoration: const InputDecoration(
-                                          border: OutlineInputBorder(),
-                                          isDense: true,
-                                        ),
-                                        controller: weightControllers[index],
-                                        onChanged: (value) => _handleInputChange(index, 'weight', value),
-                                        style: Theme.of(context).textTheme.bodyMedium,
-                                      ),
+                                      child: Text(session['weight'].toString(),
+                                          textAlign: TextAlign.center,
+                                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                                color: Theme.of(context).colorScheme.secondary,
+                                              )),
                                     ),
                                     Padding(
                                       padding: const EdgeInsets.all(8.0),
-                                      child: TextField(
-                                        keyboardType: TextInputType.number,
-                                        decoration: const InputDecoration(
-                                          border: OutlineInputBorder(),
-                                          isDense: true,
-                                        ),
-                                        controller: repsControllers[index],
-                                        onChanged: (value) => _handleInputChange(index, 'reps', value),
-                                        style: Theme.of(context).textTheme.bodyMedium,
-                                      ),
+                                      child: Text(session['reps'].toString(),
+                                          textAlign: TextAlign.center,
+                                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                                color: Theme.of(context).colorScheme.secondary,
+                                              )),
                                     ),
                                   ],
                                 );
