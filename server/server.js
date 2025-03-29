@@ -1,4 +1,6 @@
-// Laden der Umgebungsvariablen
+// server.js
+
+// Laden der Umgebungsvariablen aus der .env-Datei
 require('dotenv').config();
 
 const express = require('express');
@@ -14,15 +16,22 @@ const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
-// Falls du derzeit keinen Web-Build hast, kommentiere diese Zeile aus:
+// Da wir aktuell keinen Web-Build haben, werden diese Zeilen auskommentiert:
 // app.use(express.static(path.join(__dirname, '../frontend/build')));
+
+// Fallback-Route auskommentieren, da kein index.html existiert:
+// app.get('*', (req, res) => {
+//   res.sendFile(path.join(__dirname, '../frontend/build', 'index.html'));
+// });
 
 /**
  * Konvertiert ein Datum in die deutsche Zeitzone ("Europe/Berlin")
  * und gibt das Datum im Format "YYYY-MM-DD" zurück.
  */
 function getLocalDateString(date = new Date()) {
-  const germanDate = new Date(date.toLocaleString("en-US", { timeZone: "Europe/Berlin" }));
+  const germanDate = new Date(
+    date.toLocaleString("en-US", { timeZone: "Europe/Berlin" })
+  );
   const year = germanDate.getFullYear();
   const month = (germanDate.getMonth() + 1).toString().padStart(2, '0');
   const day = germanDate.getDate().toString().padStart(2, '0');
@@ -792,7 +801,8 @@ app.delete('/api/custom_exercise', verifyToken, async (req, res) => {
 // Fallback: Alle anderen Routen liefern die index.html
 // ----------------------
 app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, '../frontend/build', 'index.html'));
+  // Da kein Frontend Build vorhanden ist, wird hier eine 404-Antwort gesendet.
+  res.status(404).send("Not Found");
 });
 
 app.listen(PORT, () => {
