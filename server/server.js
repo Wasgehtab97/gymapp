@@ -1,6 +1,5 @@
-// server.js
+// Optimierte Version der server.js
 
-// Laden der Umgebungsvariablen aus der .env-Datei
 require('dotenv').config();
 
 const express = require('express');
@@ -16,10 +15,10 @@ const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
-// Da wir aktuell keinen Web-Build haben, werden diese Zeilen auskommentiert:
+// Da wir aktuell keinen Web-Build haben, bleiben diese Zeilen auskommentiert:
 // app.use(express.static(path.join(__dirname, '../frontend/build')));
 
-// Fallback-Route auskommentieren, da kein index.html existiert:
+// Fallback-Route (für den Fall, dass keine index.html existiert)
 // app.get('*', (req, res) => {
 //   res.sendFile(path.join(__dirname, '../frontend/build', 'index.html'));
 // });
@@ -48,7 +47,6 @@ function adminOnly(req, res, next) {
   }
   const token = authHeader.split(' ')[1];
   try {
-    // JWT_SECRET wird aus der .env-Datei geladen
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     if (decoded.role !== 'admin') {
       return res.status(403).json({ error: 'Nicht autorisiert.' });
@@ -328,11 +326,14 @@ app.get('/api/history/:userId', async (req, res) => {
     return res.status(400).json({ error: 'Ungültige Nutzer-ID' });
   let query = 'SELECT * FROM training_history WHERE user_id = $1';
   const values = [userId];
+
+  // Unterstütze beide Parameter, falls vorhanden:
   if (req.query.exercise) {
-    query += ' AND exercise = $2';
+    query += ' AND exercise = $' + (values.length + 1);
     values.push(req.query.exercise);
-  } else if (req.query.deviceId) {
-    query += ' AND device_id = $2';
+  }
+  if (req.query.deviceId) {
+    query += ' AND device_id = $' + (values.length + 1);
     values.push(req.query.deviceId);
   }
   query += ' ORDER BY training_date DESC';
@@ -752,7 +753,6 @@ app.post('/api/custom_exercise', verifyToken, async (req, res) => {
   }
 });
 
-// Neuer GET-Endpoint: Custom Exercises abrufen
 app.get('/api/custom_exercises', verifyToken, async (req, res) => {
   const { userId, deviceId } = req.query;
   if (!userId || !deviceId) {
@@ -770,7 +770,6 @@ app.get('/api/custom_exercises', verifyToken, async (req, res) => {
   }
 });
 
-// Neuer DELETE-Endpoint: Custom Exercise inklusive Verlauf löschen
 app.delete('/api/custom_exercise', verifyToken, async (req, res) => {
   const { userId, deviceId, name } = req.query;
   if (!userId || !deviceId || !name) {
@@ -798,10 +797,9 @@ app.delete('/api/custom_exercise', verifyToken, async (req, res) => {
 });
 
 // ----------------------
-// Fallback: Alle anderen Routen liefern die index.html
+// Fallback: Alle anderen Routen liefern eine 404-Antwort
 // ----------------------
 app.get('*', (req, res) => {
-  // Da kein Frontend Build vorhanden ist, wird hier eine 404-Antwort gesendet.
   res.status(404).send("Not Found");
 });
 
