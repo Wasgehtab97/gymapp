@@ -70,8 +70,8 @@ class ApiService {
     }
   }
 
-  // Gerätedaten aktualisieren (nur Admin)
-  Future<Map<String, dynamic>> updateDevice(int deviceId, String name, String exerciseMode) async {
+  // Gerätedaten aktualisieren (Name, exercise_mode und secret_code)
+  Future<Map<String, dynamic>> updateDevice(int deviceId, String name, String exerciseMode, String secretCode) async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('token') ?? '';
     final response = await http.put(
@@ -80,7 +80,11 @@ class ApiService {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer $token',
       },
-      body: jsonEncode({'name': name, 'exercise_mode': exerciseMode}),
+      body: jsonEncode({
+        'name': name,
+        'exercise_mode': exerciseMode,
+        'secret_code': secretCode,
+      }),
     );
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body) as Map<String, dynamic>;
@@ -131,7 +135,7 @@ class ApiService {
     }
   }
 
-  // Trainingsdaten posten – neuer Endpoint, der auch den Token-Header sendet
+  // Trainingsdaten posten
   Future<void> postTrainingData(Map<String, dynamic> trainingData) async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('token') ?? '';

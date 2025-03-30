@@ -210,6 +210,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                             DeviceUpdateForm(
                               deviceId: editingDevice!['id'],
                               currentName: editingDevice!['name'],
+                              currentExerciseMode: editingDevice!['exercise_mode'],
+                              currentSecretCode: editingDevice!['secret_code'],
                               onUpdated: _handleDeviceUpdate,
                             ),
                             const SizedBox(height: 8),

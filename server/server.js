@@ -1,5 +1,4 @@
-// Optimierte Version der server.js
-
+// Laden der Umgebungsvariablen aus der .env-Datei
 require('dotenv').config();
 
 const express = require('express');
@@ -15,10 +14,10 @@ const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
-// Da wir aktuell keinen Web-Build haben, bleiben diese Zeilen auskommentiert:
+// Da wir aktuell keinen Web-Build haben, werden diese Zeilen auskommentiert:
 // app.use(express.static(path.join(__dirname, '../frontend/build')));
 
-// Fallback-Route (für den Fall, dass keine index.html existiert)
+// Fallback-Route auskommentieren, da kein index.html existiert:
 // app.get('*', (req, res) => {
 //   res.sendFile(path.join(__dirname, '../frontend/build', 'index.html'));
 // });
@@ -327,7 +326,6 @@ app.get('/api/history/:userId', async (req, res) => {
   let query = 'SELECT * FROM training_history WHERE user_id = $1';
   const values = [userId];
 
-  // Unterstütze beide Parameter, falls vorhanden:
   if (req.query.exercise) {
     query += ' AND exercise = $' + (values.length + 1);
     values.push(req.query.exercise);
@@ -360,13 +358,13 @@ app.get('/api/devices', async (req, res) => {
 
 app.put('/api/devices/:id', adminOnly, async (req, res) => {
   const { id } = req.params;
-  const { name, exercise_mode } = req.body;
+  const { name, exercise_mode, secret_code } = req.body;
   if (!id || !name)
     return res.status(400).json({ error: 'Ungültige Eingabedaten.' });
   try {
     const result = await pool.query(
-      'UPDATE devices SET name = $1, exercise_mode = COALESCE($2, exercise_mode) WHERE id = $3 RETURNING *',
-      [name, exercise_mode, id]
+      'UPDATE devices SET name = $1, exercise_mode = COALESCE($2, exercise_mode), secret_code = COALESCE($3, secret_code) WHERE id = $4 RETURNING *',
+      [name, exercise_mode, secret_code, id]
     );
     if (!result.rows.length)
       return res.status(404).json({ error: 'Gerät nicht gefunden.' });

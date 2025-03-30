@@ -53,7 +53,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     "Squat",
     "Deadlift"
   ];
-  // Je nach device.exercise_mode: Bei "multi" werden defaultExercises genutzt, bei "custom" bleibt die Liste zunächst leer.
+  // Bei Geräten, deren exercise_mode NICHT "single" ist, wird die Übungsauswahl angezeigt.
   List<String> multiExerciseOptions = [];
 
   @override
@@ -62,7 +62,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     trainingDate = _formatLocalDate(DateTime.now());
     weightControllers.add(TextEditingController(text: setsData[0]['weight']));
     repsControllers.add(TextEditingController(text: setsData[0]['reps']));
-    // Standardmäßig gehen wir von "multi" aus – dieser Wert wird in _fetchDeviceInfo() angepasst.
     multiExerciseOptions = List.from(defaultExercises);
   }
 
@@ -105,9 +104,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
             deviceId = device['id'];
             deviceInfo = device;
           });
-          // Abhängig vom exercise_mode: Bei "custom" keine Standardübungen, bei "multi" defaultExercises laden
           final mode = device['exercise_mode'].toString().toLowerCase();
-          if (mode == 'custom') {
+          if (mode == 'single') {
+            // Bei single-Geräten wird automatisch der Gerätename als Übung gesetzt.
+            setState(() {
+              selectedExercise = device['name'];
+            });
+          } else if (mode == 'custom') {
             multiExerciseOptions = [];
           } else if (mode == 'multi') {
             multiExerciseOptions = List.from(defaultExercises);
@@ -162,7 +165,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
         });
         if (found != null) {
           final mode = found['exercise_mode'].toString().toLowerCase();
-          if (mode == 'custom') {
+          if (mode == 'single') {
+            setState(() {
+              selectedExercise = found['name'];
+            });
+          } else if (mode == 'custom') {
             multiExerciseOptions = [];
           } else if (mode == 'multi') {
             multiExerciseOptions = List.from(defaultExercises);
@@ -182,14 +189,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
       });
       return;
     }
-
     String? queryExercise;
     int? queryDeviceId;
-    // Für Geräte im "multi"-Modus wird die History nur geladen, wenn eine Übung ausgewählt wurde.
-    // Bei "custom" oder "single" erfolgt die Abfrage anhand der deviceId.
     if (selectedExercise != null) {
       queryExercise = selectedExercise;
-    } else if (deviceInfo != null && deviceInfo!['exercise_mode'].toString().toLowerCase() != 'multi') {
+    } else if (deviceInfo != null &&
+        deviceInfo!['exercise_mode'].toString().toLowerCase() == 'single') {
       queryDeviceId = deviceId;
     } else {
       setState(() {
@@ -199,7 +204,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       });
       return;
     }
-
     try {
       final history = await apiService.getHistory(userId!, deviceId: queryDeviceId, exercise: queryExercise);
       if (history.isNotEmpty) {
@@ -232,7 +236,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
-  /// Lädt alle Custom Exercises für den aktuellen Nutzer und das aktuelle Gerät vom Server
   Future<void> _fetchCustomExercises() async {
     if (userId == null || deviceId == null) return;
     try {
@@ -348,7 +351,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  /// Widget für die Übungsauswahl im Modus "multi" oder "custom"
   Widget _buildMultiExerciseSelection() {
     return Column(
       children: [
@@ -382,7 +384,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
             );
           }).toList(),
         ),
-        // "+" Button zum Hinzufügen eigener Übungen
         Align(
           alignment: Alignment.centerLeft,
           child: IconButton(
@@ -398,7 +399,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  /// Dialog zum Hinzufügen einer eigenen Übung
   Future<void> _showCustomExerciseDialog() async {
     final TextEditingController controller = TextEditingController();
     await showDialog(
@@ -443,7 +443,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  /// Löscht die aktuell ausgewählte Custom Exercise inklusive Verlauf
   Future<void> _deleteCustomExercise() async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -721,10 +720,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             .bodyMedium
                             ?.copyWith(fontSize: 16)),
                     const SizedBox(height: 16),
-                    // Falls im Multi-Modus noch keine Übung gewählt wurde, wird die Übungsauswahl angezeigt.
-                    // In Custom- oder Single-Modus erfolgt direkt die Eingabe.
+                    // Bei Geräten, die NICHT "single" sind und noch keine Übung gewählt wurde, wird die Übungsauswahl angezeigt.
+                    // Für single-Geräte ist selectedExercise bereits gesetzt.
                     if (deviceInfo != null &&
-                        deviceInfo!['exercise_mode'].toString().toLowerCase() == 'multi' &&
+                        deviceInfo!['exercise_mode'].toString().toLowerCase() != 'single' &&
                         selectedExercise == null)
                       _buildMultiExerciseSelection()
                     else
@@ -754,24 +753,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ],
                     ),
                     const SizedBox(height: 16),
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Theme.of(context).primaryColor,
-                        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                    // Nur anzeigen, wenn der Modus single ist oder bereits eine Übung ausgewählt wurde.
+                    if (deviceInfo != null &&
+                        (deviceInfo!['exercise_mode'].toString().toLowerCase() == 'single' ||
+                         selectedExercise != null))
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Theme.of(context).primaryColor,
+                          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                        ),
+                        onPressed: () {
+                          Navigator.pushNamed(context, '/history', arguments: {
+                            'deviceId': deviceId,
+                            if (selectedExercise != null) 'exercise': selectedExercise,
+                          });
+                        },
+                        child: Text("Zur Trainingshistorie",
+                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 16)),
                       ),
-                      onPressed: () {
-                        Navigator.pushNamed(context, '/history', arguments: {
-                          'deviceId': deviceId,
-                          if (selectedExercise != null) 'exercise': selectedExercise,
-                        });
-                      },
-                      child: Text("Zur Trainingshistorie",
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 16)),
-                    ),
                     const SizedBox(height: 24),
-                    // Anzeige der letzten Trainingseinheit – entweder, wenn eine Übung gewählt wurde (Multi)
-                    // oder im Custom-/Single-Modus auch ohne Übungsauswahl.
-                    if ((deviceInfo != null && deviceInfo!['exercise_mode'].toString().toLowerCase() != 'multi') || selectedExercise != null)
+                    // "Letzte Trainingseinheit" Tabelle nur anzeigen, wenn eine Übung ausgewählt wurde.
+                    if (selectedExercise != null)
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -793,7 +795,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ],
                       ),
                     const SizedBox(height: 8),
-                    if (((deviceInfo != null && deviceInfo!['exercise_mode'].toString().toLowerCase() != 'multi') || selectedExercise != null) && lastSession.isNotEmpty)
+                    if (selectedExercise != null && lastSession.isNotEmpty)
                       Card(
                         elevation: 4,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
