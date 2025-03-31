@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'widgets/nfc_global_listener.dart';
 import 'screens/dashboard.dart';
-import 'screens/history.dart';
+import 'screens/history.dart'; // Gerätespezifische Trainingshistorie
 import 'screens/profile.dart';
 import 'screens/report_dashboard.dart';
 import 'screens/admin_dashboard.dart';
@@ -10,7 +10,7 @@ import 'screens/gym.dart';
 import 'screens/rank.dart';
 import 'screens/affiliate_screen.dart';
 import 'home_page.dart';
-import 'theme/theme.dart'; // Import des zentralen Themes
+import 'theme/theme.dart'; // Zentrales Theme
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 

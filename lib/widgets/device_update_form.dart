@@ -1,8 +1,5 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
-import '../config.dart';
+import '../services/api_services.dart';
 
 class DeviceUpdateForm extends StatefulWidget {
   final int deviceId;
@@ -31,6 +28,7 @@ class _DeviceUpdateFormState extends State<DeviceUpdateForm> {
   late TextEditingController _secretCodeController;
   String _message = '';
   bool _isSubmitting = false;
+  final ApiService _apiService = ApiService();
 
   @override
   void initState() {
@@ -56,37 +54,21 @@ class _DeviceUpdateFormState extends State<DeviceUpdateForm> {
 
     setState(() {
       _isSubmitting = true;
+      _message = '';
     });
 
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString('token') ?? '';
-
-      final response = await http.put(
-        Uri.parse('$API_URL/api/devices/${widget.deviceId}'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-        body: jsonEncode({
-          'name': newName,
-          'exercise_mode': newExerciseMode,
-          'secret_code': newSecretCode,
-        }),
+      final updatedDevice = await _apiService.updateDevice(
+        widget.deviceId,
+        newName,
+        newExerciseMode,
+        newSecretCode,
       );
-
-      final result = jsonDecode(response.body);
-      if (response.statusCode == 200) {
-        setState(() {
-          _message = 'Gerät erfolgreich aktualisiert!';
-        });
-        if (widget.onUpdated != null) {
-          widget.onUpdated!(result['data']);
-        }
-      } else {
-        setState(() {
-          _message = result['error'] ?? 'Fehler beim Aktualisieren.';
-        });
+      setState(() {
+        _message = 'Gerät erfolgreich aktualisiert!';
+      });
+      if (widget.onUpdated != null) {
+        widget.onUpdated!(updatedDevice);
       }
     } catch (error) {
       setState(() {

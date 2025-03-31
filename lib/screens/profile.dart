@@ -5,10 +5,11 @@ import '../widgets/registration_form.dart';
 import '../widgets/login_form.dart';
 import '../widgets/streak_badge.dart';
 import '../widgets/exp_badge.dart';
-import '../widgets/calendar.dart';
-import '../widgets/full_screen_calendar.dart';
+import '../widgets/calendar.dart'; // Altes Kalender-Widget
+import '../widgets/full_screen_calendar.dart'; // Vollbildkalender-Popup
 import 'gym.dart';
 import 'rank.dart';
+import 'history.dart'; // Gerätespezifische Trainingshistorie
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -23,23 +24,20 @@ class ProfileScreenState extends State<ProfileScreen> {
   int? userId;
   int expProgress = 0;
   int divisionIndex = 0;
-  bool showCalendar = true;
   List<String> trainingDates = [];
   bool loadingDates = true;
   int streak = 0;
   bool loadingCoachingRequest = true;
-  
-  // Variable für Coaching-Anfragen
   Map<String, dynamic>? coachingRequest;
-  
+
   final ApiService apiService = ApiService();
-  
+
   @override
   void initState() {
     super.initState();
     _loadUserInfo();
   }
-  
+
   /// Konvertiert ein Datum in die deutsche Zeitzone (GMT+1) und formatiert als "YYYY-MM-DD".
   String getGermanDateString(DateTime date) {
     final germanDate = date.toUtc().add(const Duration(hours: 1));
@@ -48,7 +46,7 @@ class ProfileScreenState extends State<ProfileScreen> {
     final day = germanDate.day.toString().padLeft(2, '0');
     return "$year-$month-$day";
   }
-  
+
   Future<void> _loadUserInfo() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
@@ -79,7 +77,7 @@ class ProfileScreenState extends State<ProfileScreen> {
       }
     }
   }
-  
+
   Future<void> _fetchStreak() async {
     try {
       final response = await apiService.getDataFromUrl('/api/streak/${userId!}');
@@ -90,19 +88,18 @@ class ProfileScreenState extends State<ProfileScreen> {
       debugPrint("Fehler beim Abrufen des Streaks: $error");
     }
   }
-  
+
   Future<void> _fetchTrainingDates() async {
     try {
       final response = await apiService.getDataFromUrl('/api/history/${userId!}');
       if (response['data'] != null) {
-        // Extrahiere alle eindeutigen Trainingstage im Format "YYYY-MM-DD"
         final dates = (response['data'] as List)
-          .map<String>((entry) {
-            DateTime d = DateTime.parse(entry['training_date']);
-            return getGermanDateString(d);
-          })
-          .toSet()
-          .toList();
+            .map<String>((entry) {
+              DateTime d = DateTime.parse(entry['training_date']);
+              return getGermanDateString(d);
+            })
+            .toSet()
+            .toList();
         setState(() {
           trainingDates = dates;
         });
@@ -115,7 +112,7 @@ class ProfileScreenState extends State<ProfileScreen> {
       });
     }
   }
-  
+
   Future<void> _fetchCoachingRequest() async {
     try {
       final response = await apiService.getDataFromUrl('/api/coaching/request?clientId=$userId');
@@ -132,7 +129,7 @@ class ProfileScreenState extends State<ProfileScreen> {
       });
     }
   }
-  
+
   Future<void> _handleLogout() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.clear();
@@ -140,7 +137,7 @@ class ProfileScreenState extends State<ProfileScreen> {
       Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
     }
   }
-  
+
   Future<void> _acceptCoachingRequest() async {
     if (coachingRequest == null) return;
     try {
@@ -152,7 +149,7 @@ class ProfileScreenState extends State<ProfileScreen> {
       debugPrint("Fehler beim Annehmen der Coaching-Anfrage: $error");
     }
   }
-  
+
   Future<void> _declineCoachingRequest() async {
     if (coachingRequest == null) return;
     try {
@@ -164,7 +161,7 @@ class ProfileScreenState extends State<ProfileScreen> {
       debugPrint("Fehler beim Ablehnen der Coaching-Anfrage: $error");
     }
   }
-  
+
   @override
   Widget build(BuildContext context) {
     if (token == null || token!.isEmpty) {
@@ -188,7 +185,7 @@ class ProfileScreenState extends State<ProfileScreen> {
         ),
       );
     }
-    
+
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -280,24 +277,27 @@ class ProfileScreenState extends State<ProfileScreen> {
                         ),
                       ),
                     const SizedBox(height: 20),
-                    if (showCalendar)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 20.0),
-                        child: InkWell(
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => FullScreenCalendar(trainingDates: trainingDates),
-                              ),
+                    // Kalender-Widget (klein) – beim Tippen öffnet sich ein Popup mit FullScreenCalendar
+                    GestureDetector(
+                      onTap: () {
+                        showDialog(
+                          context: context,
+                          builder: (context) {
+                            return Dialog(
+                              insetPadding: const EdgeInsets.all(16),
+                              child: FullScreenCalendar(trainingDates: trainingDates),
                             );
                           },
-                          child: Calendar(
-                            trainingDates: trainingDates,
-                          ),
-                        ),
+                        );
+                      },
+                      child: Calendar(
+                        trainingDates: trainingDates,
+                        cellSize: 12.0,
+                        rows: 7,
+                        cellSpacing: 2.0,
                       ),
-                    // Zuerst Gym, dann Plans
+                    ),
+                    const SizedBox(height: 20),
                     ElevatedButton(
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Theme.of(context).primaryColor,
@@ -306,7 +306,7 @@ class ProfileScreenState extends State<ProfileScreen> {
                       onPressed: () {
                         Navigator.push(
                           context,
-                          MaterialPageRoute(builder: (context) => GymScreen()),
+                          MaterialPageRoute(builder: (context) => const GymScreen()),
                         );
                       },
                       child: Center(

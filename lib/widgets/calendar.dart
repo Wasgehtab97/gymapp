@@ -5,6 +5,7 @@ class Calendar extends StatelessWidget {
   final double cellSize;
   final int rows;
   final double cellSpacing;
+  final Function(DateTime)? onDayTap; // Neuer Callback für Tap-Ereignisse
 
   const Calendar({
     Key? key,
@@ -12,6 +13,7 @@ class Calendar extends StatelessWidget {
     this.cellSize = 12.0,
     this.rows = 7,
     this.cellSpacing = 2.0,
+    this.onDayTap,
   }) : super(key: key);
 
   /// Formatiert ein Datum als "YYYY-MM-DD".
@@ -24,8 +26,6 @@ class Calendar extends StatelessWidget {
 
   /// Konvertiert ein Datum in die deutsche Zeitzone (Europe/Berlin) und formatiert es als "YYYY-MM-DD".
   String _getGermanDateString(DateTime date) {
-    // Wir rechnen hier explizit 1 Stunde hinzu, falls die UTC-Zeit 1 Stunde hinter der deutschen liegt.
-    // Falls deine Server- bzw. Gerätezeit bereits in der deutschen Zeitzone ist, kann dieser Schritt entfallen.
     final germanDate = date.toUtc().add(const Duration(hours: 1));
     return _formatDate(germanDate);
   }
@@ -75,10 +75,8 @@ class Calendar extends StatelessWidget {
       );
     });
 
-    // Errechne "heute" in deutscher Zeit
     final String todayString = _getGermanDateString(DateTime.now());
 
-    // Erstelle den Kalender-Grid als Table.
     final List<TableRow> tableRows = [];
     for (int r = 0; r < rows; r++) {
       final List<Widget> rowCells = [];
@@ -87,9 +85,8 @@ class Calendar extends StatelessWidget {
         if (index < cells.length && cells[index] != null) {
           final DateTime day = cells[index]!;
           final bool isTraining = _isTrainingDay(day);
-          // Bestimme den Tag in deutscher Zeit
           final bool isToday = _getGermanDateString(day) == todayString;
-          rowCells.add(Padding(
+          Widget cell = Padding(
             padding: EdgeInsets.all(cellSpacing / 2),
             child: SizedBox(
               width: cellSize,
@@ -105,7 +102,15 @@ class Calendar extends StatelessWidget {
                 ),
               ),
             ),
-          ));
+          );
+          // Wenn onDayTap gesetzt ist, umhülle die Zelle mit GestureDetector.
+          if (onDayTap != null) {
+            cell = GestureDetector(
+              onTap: () => onDayTap!(day),
+              child: cell,
+            );
+          }
+          rowCells.add(cell);
         } else {
           rowCells.add(Padding(
             padding: EdgeInsets.all(cellSpacing / 2),

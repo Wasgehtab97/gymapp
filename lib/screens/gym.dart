@@ -58,8 +58,10 @@ class _GymScreenState extends State<GymScreen> {
               ),
               const SizedBox(height: 16),
               ListTile(
-                leading: Icon(Icons.fitness_center, color: Theme.of(context).colorScheme.secondary),
-                title: Text("Bankdrücken", style: Theme.of(context).textTheme.bodyMedium),
+                leading: Icon(Icons.fitness_center,
+                    color: Theme.of(context).colorScheme.secondary),
+                title: Text("Bankdrücken",
+                    style: Theme.of(context).textTheme.bodyMedium),
                 onTap: () {
                   Navigator.pop(context);
                   Navigator.pushNamed(
@@ -73,8 +75,10 @@ class _GymScreenState extends State<GymScreen> {
                 },
               ),
               ListTile(
-                leading: Icon(Icons.fitness_center, color: Theme.of(context).colorScheme.secondary),
-                title: Text("Kniebeugen", style: Theme.of(context).textTheme.bodyMedium),
+                leading: Icon(Icons.fitness_center,
+                    color: Theme.of(context).colorScheme.secondary),
+                title: Text("Kniebeugen",
+                    style: Theme.of(context).textTheme.bodyMedium),
                 onTap: () {
                   Navigator.pop(context);
                   Navigator.pushNamed(
@@ -88,8 +92,10 @@ class _GymScreenState extends State<GymScreen> {
                 },
               ),
               ListTile(
-                leading: Icon(Icons.fitness_center, color: Theme.of(context).colorScheme.secondary),
-                title: Text("Kreuzheben", style: Theme.of(context).textTheme.bodyMedium),
+                leading: Icon(Icons.fitness_center,
+                    color: Theme.of(context).colorScheme.secondary),
+                title: Text("Kreuzheben",
+                    style: Theme.of(context).textTheme.bodyMedium),
                 onTap: () {
                   Navigator.pop(context);
                   Navigator.pushNamed(
@@ -152,12 +158,17 @@ class _GymScreenState extends State<GymScreen> {
                         ?.copyWith(color: Colors.white),
                     decoration: InputDecoration(
                       hintText: 'Gerät suchen...',
-                      hintStyle: Theme.of(context).inputDecorationTheme.hintStyle,
+                      hintStyle:
+                          Theme.of(context).inputDecorationTheme.hintStyle,
                       border: InputBorder.none,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 14),
                       prefixIcon: Icon(
                         Icons.search,
-                        color: Theme.of(context).colorScheme.secondary.withOpacity(0.7),
+                        color: Theme.of(context)
+                            .colorScheme
+                            .secondary
+                            .withOpacity(0.7),
                       ),
                     ),
                     onChanged: (value) {
@@ -178,7 +189,14 @@ class _GymScreenState extends State<GymScreen> {
                                 style: Theme.of(context).textTheme.bodyLarge,
                               ),
                             )
-                          : ListView.builder(
+                          : GridView.builder(
+                              gridDelegate:
+                                  const SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: 2,
+                                mainAxisSpacing: 12,
+                                crossAxisSpacing: 12,
+                                childAspectRatio: 3 / 2,
+                              ),
                               itemCount: filteredDevices.length,
                               itemBuilder: (context, index) {
                                 final device = filteredDevices[index];
@@ -199,11 +217,7 @@ class _GymScreenState extends State<GymScreen> {
                                       borderRadius: BorderRadius.circular(16),
                                     ),
                                     elevation: 4,
-                                    margin: const EdgeInsets.only(bottom: 12),
                                     child: Container(
-                                      width: double.infinity,
-                                      height: 80,
-                                      padding: const EdgeInsets.symmetric(horizontal: 16),
                                       decoration: BoxDecoration(
                                         borderRadius: BorderRadius.circular(16),
                                         gradient: LinearGradient(
@@ -212,52 +226,45 @@ class _GymScreenState extends State<GymScreen> {
                                                 .colorScheme
                                                 .secondary
                                                 .withOpacity(0.2),
-                                            Theme.of(context).colorScheme.secondary,
+                                            Theme.of(context)
+                                                .colorScheme
+                                                .secondary,
                                           ],
                                           begin: Alignment.topLeft,
                                           end: Alignment.bottomRight,
                                         ),
                                       ),
-                                      child: Stack(
+                                      padding: const EdgeInsets.all(12),
+                                      child: Column(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
                                         children: [
-                                          // Geräte-Name zentriert
-                                          Align(
-                                            alignment: Alignment.centerLeft,
-                                            child: Row(
-                                              children: [
-                                                const Icon(
-                                                  Icons.fitness_center,
-                                                  size: 36,
+                                          Icon(
+                                            Icons.fitness_center,
+                                            size: 36,
+                                            color: Colors.white,
+                                          ),
+                                          const SizedBox(height: 8),
+                                          Text(
+                                            device['name'],
+                                            textAlign: TextAlign.center,
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .bodyLarge
+                                                ?.copyWith(
+                                                  fontSize: 16,
+                                                  fontWeight: FontWeight.bold,
                                                   color: Colors.white,
                                                 ),
-                                                const SizedBox(width: 16),
-                                                Expanded(
-                                                  child: Text(
-                                                    device['name'],
-                                                    style: Theme.of(context)
-                                                        .textTheme
-                                                        .bodyLarge
-                                                        ?.copyWith(
-                                                          fontSize: 16,
-                                                          fontWeight: FontWeight.bold,
-                                                          color: Colors.white,
-                                                        ),
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
                                           ),
-                                          // Geräte-ID oben rechts
-                                          Positioned(
-                                            top: 4,
-                                            right: 8,
-                                            child: Text(
-                                              device['id'].toString(),
-                                              style: Theme.of(context)
-                                                  .textTheme
-                                                  .bodySmall
-                                                  ?.copyWith(color: Colors.white70),
-                                            ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            'ID: ${device['id']}',
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .bodySmall
+                                                ?.copyWith(
+                                                    color: Colors.white70),
                                           ),
                                         ],
                                       ),

@@ -13,7 +13,6 @@ class AdminDashboardScreen extends StatefulWidget {
 class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   List<dynamic> devices = [];
   String filterQuery = "";
-  Map<String, dynamic>? editingDevice;
   bool isLoading = true;
   final ApiService apiService = ApiService();
 
@@ -26,7 +25,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   Future<void> _fetchDevices() async {
     try {
       final fetchedDevices = await apiService.getDevices();
-      // Sortiere nach 'order' oder ID
       fetchedDevices.sort((a, b) {
         var orderA = a['order'] ?? a['id'];
         var orderB = b['order'] ?? b['id'];
@@ -51,7 +49,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       devices = devices.map((device) {
         return device['id'] == updatedDevice['id'] ? updatedDevice : device;
       }).toList();
-      editingDevice = null;
     });
   }
 
@@ -67,6 +64,40 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       builder: (context) {
         return DeviceCreateForm(onCreated: _handleDeviceCreate);
       },
+    );
+  }
+
+  void _showUpdateDeviceDialog(Map<String, dynamic> device) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(
+          'Gerät bearbeiten',
+          style: Theme.of(context).textTheme.titleLarge,
+        ),
+        content: SingleChildScrollView(
+          child: DeviceUpdateForm(
+            deviceId: device['id'],
+            currentName: device['name'],
+            currentExerciseMode: device['exercise_mode'],
+            currentSecretCode: device['secret_code'],
+            onUpdated: (updatedDevice) {
+              _handleDeviceUpdate(updatedDevice);
+              Navigator.of(context).pop();
+            },
+          ),
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(),
+            style: ElevatedButton.styleFrom(backgroundColor: Theme.of(context).primaryColor),
+            child: Text(
+              'Schließen',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Theme.of(context).colorScheme.secondary),
+            ),
+          )
+        ],
+      ),
     );
   }
 
@@ -87,7 +118,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       ),
       body: Container(
         decoration: const BoxDecoration(
-          // Den Gradient kannst du in Zukunft auch zentral definieren
           gradient: LinearGradient(
             colors: [Color(0xFF0D0D0D), Color(0xFF1A1A1A)],
             begin: Alignment.topLeft,
@@ -111,7 +141,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                             ),
                       ),
                       const SizedBox(height: 16),
-                      // Filter-Input
                       Row(
                         children: [
                           Text(
@@ -174,11 +203,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                                       ),
                                 ),
                                 trailing: ElevatedButton(
-                                  onPressed: () {
-                                    setState(() {
-                                      editingDevice = device;
-                                    });
-                                  },
+                                  onPressed: () => _showUpdateDeviceDialog(device),
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: Theme.of(context).primaryColor,
                                   ),
@@ -192,46 +217,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                               ),
                             );
                           },
-                        ),
-                      const SizedBox(height: 16),
-                      if (editingDevice != null)
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Bearbeite: ${editingDevice!['name']}',
-                              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                    color: Theme.of(context).colorScheme.secondary,
-                                  ),
-                            ),
-                            const SizedBox(height: 8),
-                            DeviceUpdateForm(
-                              deviceId: editingDevice!['id'],
-                              currentName: editingDevice!['name'],
-                              currentExerciseMode: editingDevice!['exercise_mode'],
-                              currentSecretCode: editingDevice!['secret_code'],
-                              onUpdated: _handleDeviceUpdate,
-                            ),
-                            const SizedBox(height: 8),
-                            ElevatedButton(
-                              onPressed: () {
-                                setState(() {
-                                  editingDevice = null;
-                                });
-                              },
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Theme.of(context).primaryColor,
-                              ),
-                              child: Text(
-                                'Schließen',
-                                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                      color: Theme.of(context).colorScheme.secondary,
-                                    ),
-                              ),
-                            ),
-                          ],
                         ),
                     ],
                   ),
