@@ -14,10 +14,8 @@ const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
-// Da wir aktuell keinen Web-Build haben, werden diese Zeilen auskommentiert:
+// Falls ein Web-Build existiert, können folgende Zeilen aktiviert werden:
 // app.use(express.static(path.join(__dirname, '../frontend/build')));
-
-// Fallback-Route auskommentieren, da kein index.html existiert:
 // app.get('*', (req, res) => {
 //   res.sendFile(path.join(__dirname, '../frontend/build', 'index.html'));
 // });
@@ -149,7 +147,12 @@ app.post('/api/register', async (req, res) => {
       process.env.JWT_SECRET,
       { expiresIn: '1h' }
     );
-    res.json({ message: 'Benutzer erfolgreich registriert', token });
+    const refreshToken = jwt.sign(
+      { userId: user.id },
+      process.env.JWT_REFRESH_SECRET,
+      { expiresIn: '7d' }
+    );
+    res.json({ message: 'Benutzer erfolgreich registriert', token, refreshToken });
   } catch (error) {
     console.error('Registrierungsfehler:', error.message);
     res.status(500).json({ error: 'Serverfehler bei der Registrierung' });
@@ -171,9 +174,15 @@ app.post('/api/login', async (req, res) => {
       process.env.JWT_SECRET,
       { expiresIn: '1h' }
     );
+    const refreshToken = jwt.sign(
+      { userId: user.id },
+      process.env.JWT_REFRESH_SECRET,
+      { expiresIn: '7d' }
+    );
     res.json({
       message: 'Login erfolgreich',
       token,
+      refreshToken,
       userId: user.id,
       username: user.name,
       role: user.role,
@@ -184,6 +193,24 @@ app.post('/api/login', async (req, res) => {
   } catch (error) {
     console.error('Login-Fehler:', error.message);
     res.status(500).json({ error: 'Serverfehler beim Login' });
+  }
+});
+
+// Neuer Endpoint: Token Refresh
+app.post('/api/refresh', async (req, res) => {
+  const { refreshToken } = req.body;
+  if (!refreshToken) return res.status(400).json({ error: 'Kein Refresh Token übermittelt.' });
+  try {
+    const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
+    const newToken = jwt.sign(
+      { userId: decoded.userId },
+      process.env.JWT_SECRET,
+      { expiresIn: '1h' }
+    );
+    res.json({ token: newToken });
+  } catch (error) {
+    console.error('Refresh-Fehler:', error.message);
+    res.status(401).json({ error: 'Ungültiger Refresh Token.' });
   }
 });
 

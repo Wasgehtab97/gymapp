@@ -6,6 +6,43 @@ import '../config.dart';
 class ApiService {
   final String baseUrl = API_URL;
 
+  /// Hilfsmethode, die einen Request ausführt und bei einem 401-Error automatisch versucht,
+  /// den Token über [refreshToken] zu erneuern und den Request zu wiederholen.
+  Future<http.Response> _withTokenRefresh(
+      Future<http.Response> Function() requestFunction) async {
+    http.Response response = await requestFunction();
+    if (response.statusCode == 401) {
+      // Versuche, den Token zu erneuern
+      try {
+        await refreshToken();
+        response = await requestFunction();
+      } catch (e) {
+        throw Exception('Token refresh failed: $e');
+      }
+    }
+    return response;
+  }
+
+  /// Führt den Refresh-Token-Request aus und speichert den neuen Access-Token.
+  Future<void> refreshToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    final storedRefreshToken = prefs.getString('refreshToken') ?? '';
+    final response = await http.post(
+      Uri.parse('$baseUrl/api/refresh'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'refreshToken': storedRefreshToken}),
+    );
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      final newToken = data['token'];
+      await prefs.setString('token', newToken);
+    } else {
+      throw Exception('Failed to refresh token: ${response.statusCode}');
+    }
+  }
+
+  // Öffentliche Methoden
+
   // Geräte abrufen
   Future<List<dynamic>> getDevices() async {
     final response = await http.get(Uri.parse('$baseUrl/api/devices'));
@@ -21,17 +58,17 @@ class ApiService {
   Future<Map<String, dynamic>> createDevice(String name, String exerciseMode) async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('token') ?? '';
-    final response = await http.post(
-      Uri.parse('$baseUrl/api/devices'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-      body: jsonEncode({
-        'name': name,
-        'exercise_mode': exerciseMode,
-      }),
-    );
+    final response = await _withTokenRefresh(() => http.post(
+          Uri.parse('$baseUrl/api/devices'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $token',
+          },
+          body: jsonEncode({
+            'name': name,
+            'exercise_mode': exerciseMode,
+          }),
+        ));
     if (response.statusCode == 200) {
       return jsonDecode(response.body) as Map<String, dynamic>;
     } else {
@@ -41,7 +78,8 @@ class ApiService {
 
   // Gerät anhand von device_id und secret_code abrufen
   Future<Map<String, dynamic>> getDeviceBySecret(int deviceId, String secretCode) async {
-    final response = await http.get(Uri.parse('$baseUrl/api/device_by_secret?device_id=$deviceId&secret_code=$secretCode'));
+    final response = await http.get(Uri.parse(
+        '$baseUrl/api/device_by_secret?device_id=$deviceId&secret_code=$secretCode'));
     if (response.statusCode == 200) {
       return jsonDecode(response.body)['data'] as Map<String, dynamic>;
     } else {
@@ -71,21 +109,22 @@ class ApiService {
   }
 
   // Gerätedaten aktualisieren (Name, exercise_mode und secret_code)
-  Future<Map<String, dynamic>> updateDevice(int deviceId, String name, String exerciseMode, String secretCode) async {
+  Future<Map<String, dynamic>> updateDevice(
+      int deviceId, String name, String exerciseMode, String secretCode) async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('token') ?? '';
-    final response = await http.put(
-      Uri.parse('$baseUrl/api/devices/$deviceId'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-      body: jsonEncode({
-        'name': name,
-        'exercise_mode': exerciseMode,
-        'secret_code': secretCode,
-      }),
-    );
+    final response = await _withTokenRefresh(() => http.put(
+          Uri.parse('$baseUrl/api/devices/$deviceId'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $token',
+          },
+          body: jsonEncode({
+            'name': name,
+            'exercise_mode': exerciseMode,
+            'secret_code': secretCode,
+          }),
+        ));
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body) as Map<String, dynamic>;
       return data['data'];
@@ -95,7 +134,8 @@ class ApiService {
   }
 
   // Benutzerregistrierung
-  Future<Map<String, dynamic>> registerUser(String name, String email, String password, String membershipNumber) async {
+  Future<Map<String, dynamic>> registerUser(
+      String name, String email, String password, String membershipNumber) async {
     final response = await http.post(
       Uri.parse('$baseUrl/api/register'),
       headers: {'Content-Type': 'application/json'},
@@ -113,7 +153,7 @@ class ApiService {
     }
   }
 
-  // Benutzer-Login inkl. EXP-Daten
+  // Benutzer-Login inkl. EXP-Daten und Refresh-Token
   Future<Map<String, dynamic>> loginUser(String email, String password) async {
     final response = await http.post(
       Uri.parse('$baseUrl/api/login'),
@@ -129,6 +169,13 @@ class ApiService {
       if (result.containsKey('division_index')) {
         await prefs.setInt('division_index', result['division_index']);
       }
+      // Speichere sowohl den Access-Token als auch den Refresh-Token
+      if (result.containsKey('token')) {
+        await prefs.setString('token', result['token']);
+      }
+      if (result.containsKey('refreshToken')) {
+        await prefs.setString('refreshToken', result['refreshToken']);
+      }
       return result;
     } else {
       throw Exception('Login failed: ${response.statusCode}');
@@ -139,21 +186,22 @@ class ApiService {
   Future<void> postTrainingData(Map<String, dynamic> trainingData) async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('token') ?? '';
-    final response = await http.post(
-      Uri.parse('$baseUrl/api/training'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-      body: jsonEncode(trainingData),
-    );
+    final response = await _withTokenRefresh(() => http.post(
+          Uri.parse('$baseUrl/api/training'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $token',
+          },
+          body: jsonEncode(trainingData),
+        ));
     if (response.statusCode != 200) {
       throw Exception(response.body);
     }
   }
 
   // Reporting-Daten abrufen
-  Future<List<dynamic>> getReportingData({String? startDate, String? endDate, String? deviceId}) async {
+  Future<List<dynamic>> getReportingData(
+      {String? startDate, String? endDate, String? deviceId}) async {
     List<String> queryParams = [];
     if (startDate != null && endDate != null) {
       queryParams.add("startDate=${Uri.encodeComponent(startDate)}");
@@ -259,18 +307,17 @@ class ApiService {
   // Neue Methoden für das Coach-Feature
   // ---------------------------
 
-  // 1. Alle Klienten für einen Coach abrufen
   Future<List<dynamic>> getClientsForCoach() async {
     final prefs = await SharedPreferences.getInstance();
     final coachId = prefs.getInt('userId');
     final token = prefs.getString('token') ?? '';
-    final response = await http.get(
-      Uri.parse('$baseUrl/api/coach/clients?coachId=$coachId'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-    );
+    final response = await _withTokenRefresh(() => http.get(
+          Uri.parse('$baseUrl/api/coach/clients?coachId=$coachId'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $token',
+          },
+        ));
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body) as Map<String, dynamic>;
       return data['data'];
@@ -279,68 +326,64 @@ class ApiService {
     }
   }
 
-  // 2. Coaching-Anfrage senden per ID
   Future<void> sendCoachingRequest(int clientId) async {
     final prefs = await SharedPreferences.getInstance();
     final coachId = prefs.getInt('userId');
     final token = prefs.getString('token') ?? '';
-    final response = await http.post(
-      Uri.parse('$baseUrl/api/coaching/request'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-      body: jsonEncode({
-        'coachId': coachId,
-        'clientId': clientId,
-      }),
-    );
+    final response = await _withTokenRefresh(() => http.post(
+          Uri.parse('$baseUrl/api/coaching/request'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $token',
+          },
+          body: jsonEncode({
+            'coachId': coachId,
+            'clientId': clientId,
+          }),
+        ));
     if (response.statusCode != 200) {
       throw Exception('Coaching request failed: ${response.statusCode}');
     }
   }
 
-  // 2a. Coaching-Anfrage senden per Mitgliedsnummer
   Future<void> sendCoachingRequestByMembership(String membershipNumber) async {
     final prefs = await SharedPreferences.getInstance();
     final coachId = prefs.getInt('userId');
     final token = prefs.getString('token') ?? '';
-    final response = await http.post(
-      Uri.parse('$baseUrl/api/coaching/request/by-membership'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-      body: jsonEncode({
-        'coachId': coachId,
-        'membershipNumber': membershipNumber,
-      }),
-    );
+    final response = await _withTokenRefresh(() => http.post(
+          Uri.parse('$baseUrl/api/coaching/request/by-membership'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $token',
+          },
+          body: jsonEncode({
+            'coachId': coachId,
+            'membershipNumber': membershipNumber,
+          }),
+        ));
     if (response.statusCode != 200) {
       throw Exception('Coaching request failed: ${response.statusCode}');
     }
   }
 
-  // 3. Auf Coaching-Anfrage antworten (akzeptieren/ablehnen)
   Future<void> respondCoachingRequest(int requestId, bool accept) async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('token') ?? '';
-    final response = await http.put(
-      Uri.parse('$baseUrl/api/coaching/request/$requestId'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-      body: jsonEncode({
-        'status': accept ? 'accepted' : 'rejected',
-      }),
-    );
+    final response = await _withTokenRefresh(() => http.put(
+          Uri.parse('$baseUrl/api/coaching/request/$requestId'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $token',
+          },
+          body: jsonEncode({
+            'status': accept ? 'accepted' : 'rejected',
+          }),
+        ));
     if (response.statusCode != 200) {
       throw Exception('Responding to coaching request failed: ${response.statusCode}');
     }
   }
 
-  // 4. Trainingshistorie eines Clients abrufen
   Future<List<dynamic>> fetchClientHistory(int clientId, {int? deviceId, String? exercise}) async {
     String url = '$baseUrl/api/history/$clientId';
     List<String> queryParams = [];
@@ -361,7 +404,6 @@ class ApiService {
     }
   }
 
-  // 5. Einen neuen Trainingsplan für einen Client erstellen
   Future<Map<String, dynamic>> createTrainingPlanForClient(int clientId, String name) async {
     final response = await http.post(
       Uri.parse('$baseUrl/api/coach/training-plans'),
@@ -375,7 +417,6 @@ class ApiService {
     }
   }
 
-  // 6. Einen existierenden Trainingsplan eines Clients aktualisieren
   Future<Map<String, dynamic>> updateTrainingPlanForClient(int planId, List<Map<String, dynamic>> exercises) async {
     final response = await http.put(
       Uri.parse('$baseUrl/api/coach/training-plans/$planId'),
@@ -389,7 +430,6 @@ class ApiService {
     }
   }
 
-  // Neuer API-Aufruf: Alle registrierten Nutzer abrufen
   Future<List<dynamic>> getAllUsers() async {
     final response = await http.get(Uri.parse('$baseUrl/api/users'));
     if (response.statusCode == 200) {
@@ -404,7 +444,6 @@ class ApiService {
   // Neue Methoden für Affiliate-Funktionalität
   // ---------------------------
 
-  // Affiliate-Angebote abrufen (Dummy-Daten mit lokalen Bildern)
   Future<List<dynamic>> getAffiliateOffers() async {
     await Future.delayed(const Duration(seconds: 1));
     return [
@@ -431,7 +470,6 @@ class ApiService {
     ];
   }
 
-  // Affiliate-Klicks tracken
   Future<void> trackAffiliateClick(int offerId) async {
     final response = await http.post(
       Uri.parse('$baseUrl/api/affiliate_click'),
@@ -449,18 +487,18 @@ class ApiService {
   Future<Map<String, dynamic>> createCustomExercise(int userId, int deviceId, String exerciseName) async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('token') ?? '';
-    final response = await http.post(
-      Uri.parse('$baseUrl/api/custom_exercise'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-      body: jsonEncode({
-        'userId': userId,
-        'deviceId': deviceId,
-        'name': exerciseName,
-      }),
-    );
+    final response = await _withTokenRefresh(() => http.post(
+          Uri.parse('$baseUrl/api/custom_exercise'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $token',
+          },
+          body: jsonEncode({
+            'userId': userId,
+            'deviceId': deviceId,
+            'name': exerciseName,
+          }),
+        ));
     if (response.statusCode == 200) {
       return jsonDecode(response.body)['data'] as Map<String, dynamic>;
     } else {
@@ -468,17 +506,16 @@ class ApiService {
     }
   }
 
-  // Neue Methode: Custom Exercises abrufen
   Future<List<dynamic>> getCustomExercises(int userId, int deviceId) async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('token') ?? '';
-    final response = await http.get(
-      Uri.parse('$baseUrl/api/custom_exercises?userId=$userId&deviceId=$deviceId'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-    );
+    final response = await _withTokenRefresh(() => http.get(
+          Uri.parse('$baseUrl/api/custom_exercises?userId=$userId&deviceId=$deviceId'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $token',
+          },
+        ));
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body) as Map<String, dynamic>;
       return data['data'];
@@ -487,17 +524,16 @@ class ApiService {
     }
   }
 
-  // Neue Methode: Custom Exercise löschen (inkl. Verlauf)
   Future<Map<String, dynamic>> deleteCustomExercise(int userId, int deviceId, String exerciseName) async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('token') ?? '';
-    final response = await http.delete(
-      Uri.parse('$baseUrl/api/custom_exercise?userId=$userId&deviceId=$deviceId&name=${Uri.encodeComponent(exerciseName)}'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-    );
+    final response = await _withTokenRefresh(() => http.delete(
+          Uri.parse('$baseUrl/api/custom_exercise?userId=$userId&deviceId=$deviceId&name=${Uri.encodeComponent(exerciseName)}'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $token',
+          },
+        ));
     if (response.statusCode == 200) {
       return jsonDecode(response.body)['data'] as Map<String, dynamic>;
     } else {
